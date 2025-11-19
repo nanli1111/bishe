@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataset import get_signal_shape
+from dataset.dataset import get_signal_shape
 
 
 class PositionalEncoding(nn.Module):

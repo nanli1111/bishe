@@ -26,7 +26,7 @@ def train_ddrm(model, ddrm, train_loader, val_loader, epochs=50, lr=1e-4, device
         epoch_loss = 0
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs}")
         
-        for x in pbar:
+        for x, _, _ in pbar:
             x = x.to(device)
             # 随机选择时间步
             t = torch.randint(0, ddrm.n_steps, (x.size(0),), device=device).long()
@@ -67,7 +67,7 @@ def train_ddrm(model, ddrm, train_loader, val_loader, epochs=50, lr=1e-4, device
             epochs_since_improvement = 0  # 重置计数器
             print(f"Validation loss improved, saving model...")
             # 保存模型
-            torch.save(model.state_dict(), os.path.join(save_dir, f"best_model_epoch_with_n_steps{n_steps}.pth"))
+            torch.save(model.state_dict(), os.path.join(save_dir, f"best_model_epoch_with_n_steps{ddrm.n_steps}.pth"))
         else:
             epochs_since_improvement += 1
             print(f"Validation loss did not improve at epoch {epoch}. {epochs_since_improvement}/{patience} epochs without improvement.")
@@ -104,7 +104,7 @@ def train_ddrm(model, ddrm, train_loader, val_loader, epochs=50, lr=1e-4, device
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_steps = 30  # 扩散步数，可调整
+    n_steps = 60  # 扩散步数，可调整
     batch_size = 64  # 批次大小
     epochs = 1000 # 训练轮数（给一个足够大的值即可）   
     lr = 1e-4

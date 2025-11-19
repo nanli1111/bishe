@@ -7,7 +7,7 @@ import math
 from torchvision.utils import save_image
 from model.unet import UNet, build_network
 from ddrm_core import DDRM
-from dataset import get_QPSKdataloader, get_signal_shape
+from dataset.dataset import get_test_QPSKdataloader, get_signal_shape
 
 
 # 加噪
@@ -55,7 +55,7 @@ def add_awgn_noise_torch(clean_data, EbN0_db):
 
 
 
-def test_ddrm_snr(model, ddrm, dataloader, snr_list=[5, 10, 20, 30], device='cuda', save_dir='ddrm_qpsk/test_results'):
+def test_ddrm_snr(model, ddrm, dataloader, snr_list=[5, 10, 20, 30], device='cuda', save_dir='ddrm/ddrm_awgn/test_results'):
     os.makedirs(save_dir, exist_ok=True)
     model.eval()
     ddrm.model.eval()
@@ -127,19 +127,19 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ======== 配置模型 ========
-    n_steps = 100  # 扩散步数
+    n_steps = 50  # 扩散步数
     net_cfg = {'type': 'UNet', 'channels': [10, 20, 40, 80], 'pe_dim': 128}
     model = build_network(net_cfg, n_steps).to(device)
 
     # 加载训练好的模型权重
-    model.load_state_dict(torch.load('ddrm_qpsk/results/model_epoch50_100.pth', map_location=device))
+    model.load_state_dict(torch.load(r'ddrm/ddrm_awgn/results/best_model_epoch_with_n_steps50.pth', map_location=device))
 
     # DDRM 对象
     ddrm = DDRM(model, n_steps=n_steps, min_beta=1e-4, max_beta=0.02, device=device)
 
     # 数据加载
-    dataloader = get_QPSKdataloader(start = 100000, end = 120000, batch_size=16)
+    dataloader = get_test_QPSKdataloader(start = 100000, end = 120000, batch_size=16)
 
     # 测试不同 SNR
-    snr_list = np.arange(2, 18, 5)  # 单位 dB
+    snr_list = np.arange(-2, 15, 5)  # 单位 dB
     test_ddrm_snr(model, ddrm, dataloader, snr_list=snr_list, device=device)
