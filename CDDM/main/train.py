@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 from torchvision.utils import save_image
 
 # 自定义模块
-from model.unet import CDDMUNet, build_cddm_network  # 假设您有CDDM网络
-from cddm_core import CDDM  # 假设您有CDDM核心类
-from dataset import get_QPSKdataloader_with_channel  # 需要支持信道数据的dataloader
+from model.unet import CDDMUNet, build_cddm_network  # CDDM网络
+from cddm_core import CDDM  # CDDM核心类
+from dataset.dataset import get_QPSKdataloader  # 需要支持信道数据的dataloader
 
 def train_cddm(model, cddm, dataloader, epochs=50, lr=1e-4, device='cuda', save_dir='./cddm_results'):
     """
@@ -34,35 +34,35 @@ def train_cddm(model, cddm, dataloader, epochs=50, lr=1e-4, device='cuda', save_
         pbar = tqdm(dataloader, desc=f"Epoch {epoch}/{epochs}")
         
         for batch_data in pbar:
-            # ==================== 数据接口 ====================
-            # 接口1: 如果dataloader返回 (x, h_c, sigma)
-            if len(batch_data) == 3:
-                x, h_c, sigma = batch_data
-                x = x.to(device)
-                h_c = h_c.to(device)
-                sigma = sigma.to(device) if isinstance(sigma, torch.Tensor) else torch.tensor(sigma).to(device)
             
-            # 接口2: 如果dataloader返回 (x, h_c)，使用固定sigma
-            elif len(batch_data) == 2:
-                x, h_c = batch_data
-                x = x.to(device)
-                h_c = h_c.to(device)
-                sigma = torch.tensor(0.1).to(device)  # 默认sigma
-            
-            # 接口3: 如果dataloader返回复杂结构，使用自定义处理函数
-            else:
-                # 这里可以调用自定义的数据处理函数
-                x, h_c, sigma = process_custom_batch_data(batch_data, device)
+            x, h_c, _ = batch_data
+            x = x.to(device)
+            h_c = h_c.to(device)
+            sigma = torch.tensor(0.1).to(device)  # 默认sigma
             
             # ==================== CDDM训练步骤 ====================
             # 随机选择时间步
             t = torch.randint(0, cddm.n_steps, (x.size(0),), device=device).long()
+
+            # 生成噪声 eps (从标准正态分布中采样)
+            eps = torch.randn_like(x)  # 生成标准正态分布的噪声 [batch_size, 2, 48]
             
-            # 计算CDDM损失
-            loss = cddm.train_step(x, model, h_c, sigma, optimizer)
+            # 1. 获取带噪信号 (前向扩散)
+            x_t = cddm.sample_forward(x, t, h_c, sigma, eps)
             
-            epoch_loss += loss
-            pbar.set_postfix({'loss': loss})
+            # 2. 使用网络预测噪声
+            eps_pred = model(x_t, t, h_c)  # 模型输出预测的噪声
+            
+            # 3. 计算损失: 预测噪声与真实噪声的 MSE
+            loss = torch.mean((eps - eps_pred) ** 2)
+            
+            # 4. 反向传播和优化
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            epoch_loss += loss.item()
+            pbar.set_postfix({'loss': loss.item()})
 
         scheduler.step()
         avg_loss = epoch_loss / len(dataloader)
@@ -190,49 +190,16 @@ def train_cddm(model, cddm, dataloader, epochs=50, lr=1e-4, device='cuda', save_
     
     print("✅ CDDM Training finished and all results saved!")
 
-def process_custom_batch_data(batch_data, device):
-    """
-    自定义批次数据处理函数
-    根据您的实际数据结构进行调整
-    """
-    # 示例：如果您的数据是复杂结构
-    # 假设 batch_data 包含 x, h_c, 和其他信息
-    if isinstance(batch_data, dict):
-        x = batch_data['signal'].to(device)
-        h_c = batch_data['channel'].to(device)
-        sigma = batch_data.get('sigma', torch.tensor(0.1)).to(device)
-    elif isinstance(batch_data, (list, tuple)):
-        # 根据您的数据结构调整索引
-        x = batch_data[0].to(device)
-        h_c = batch_data[1].to(device)
-        sigma = torch.tensor(0.1).to(device)  # 默认值
-    else:
-        raise ValueError("Unsupported batch data format")
-    
-    return x, h_c, sigma
-
-def get_cddm_dataloader(start=0, end=100000, batch_size=64, include_channel=True):
-    """
-    获取CDDM数据加载器
-    需要返回 (信号, 信道估计, 噪声水平) 或 (信号, 信道估计)
-    """
-    # 这里需要您根据实际数据源实现
-    # 示例实现：
-    if include_channel:
-        # 返回 (x, h_c, sigma)
-        dataloader = get_QPSKdataloader_with_channel(start, end, batch_size)
-    else:
-        # 返回 (x, h_c)，使用固定sigma
-        dataloader = get_QPSKdataloader(start, end, batch_size)
-    
-    return dataloader
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_steps = 1000  # CDDM通常需要更多步数
-    batch_size = 32
+    n_steps = 100  # CDDM通常需要更多步数
+    batch_size = 64
     epochs = 100
     lr = 1e-4
+    # ===== 获取数据加载器 =====    
+    dataloader = get_QPSKdataloader(start=0, end=400000, batch_size=batch_size, shuffle=True)   #返回x,h_c
+
 
     # ===== 构建CDDM模型 =====
     cddm_net_cfg = {
@@ -253,13 +220,6 @@ if __name__ == "__main__":
     )
 
     # ===== 获取数据 =====
-    # 使用支持信道数据的数据加载器
-    dataloader = get_cddm_dataloader(
-        start=0, 
-        end=100000, 
-        batch_size=batch_size, 
-        include_channel=True
-    )
 
     # ===== 训练CDDM =====
     train_cddm(

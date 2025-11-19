@@ -14,9 +14,9 @@ from torch.utils.data import Dataset, DataLoader, random_split
 #加载数据集
 class Dataset(Dataset):
     def __init__(self, start_samples, end_samples, seq_len=48, n_channels=2, n_classes=4):
-        self.x = np.load(r'data\rayleigh_data\impaired_waveforms.npy')
+        self.x = np.load(r'data\rayleigh_data\clean_waveforms.npy')
         self.y = np.load(r'data\rayleigh_data\true_h.npy')
-        self.z = np.load(r'data\rayleigh_data\clean_waveforms.npy')
+        self.z = np.load(r'data\rayleigh_data\impaired_waveforms.npy')
         self.x = self.x[start_samples:end_samples]
         self.y = self.y[start_samples:end_samples]
         self.z = self.z[start_samples:end_samples]
@@ -27,7 +27,7 @@ class Dataset(Dataset):
     def __getitem__(self, idx):
         return self.x[idx], self.y[idx], self.z[idx]
 
-def get_QPSKdataloader(start = 0, end = 100000, batch_size=64, shuffle = True ):
+def get_QPSKdataloader(start = 0, end = 400000, batch_size=64, shuffle = True ):
 
     train_data = Dataset(start, end)
 

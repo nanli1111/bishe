@@ -11,9 +11,8 @@ from torchvision.utils import save_image
 # 自定义模块
 from model.unet import UNet, build_network
 from ddrm_core import DDRM
-from dataset.dataset import get_QPSKdataloader, Dataset  
+from dataset.dataset import get_test_QPSKdataloader, QPSKDataset 
 from test_fig import add_awgn_noise_np, add_awgn_noise_torch
-
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 # 设置支持中文的字体
@@ -24,30 +23,28 @@ rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 #模型去噪
 
-def model_test(snrDB):
+def model_test(snrDB, n_steps):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ======== 配置模型 ========
-    n_steps = 100  # 扩散步数
     net_cfg = {'type': 'UNet', 'channels': [10, 20, 40, 80], 'pe_dim': 128}
     model = build_network(net_cfg, n_steps).to(device)
 
     # 加载训练好的模型权重
-    model.load_state_dict(torch.load('ddrm_qpsk/results/model_epoch50_100.pth', map_location=device))
+    model.load_state_dict(torch.load(fr'ddrm/ddrm_awgn/results/best_model_epoch_with_n_steps{n_steps}.pth', map_location=device))
 
     # DDRM 对象
     ddrm = DDRM(model, n_steps=n_steps, min_beta=1e-4, max_beta=0.02, device=device)
 
     # 数据加载
-    test_data = Dataset(100000, 120000)
+    test_data = QPSKDataset(100000, 120000)
     test_data.x = add_awgn_noise_np(test_data.x, snrDB)
     # 确保数据类型为 Float
     test_data.x = torch.tensor(test_data.x, dtype=torch.float32)
 
-    test_loader =DataLoader(test_data, batch_size=64, shuffle=False)
+    test_loader =DataLoader(test_data, batch_size=256, shuffle=False)
 
-    #test_loader = get_QPSKdataloader(100000, 120000, batch_size=64, shuffle = False)
     # 用于存储所有生成的结果
     all_generated = []
     pbar = tqdm(test_loader, desc=f"snrdb: {snr_db}")
@@ -129,9 +126,9 @@ def calculate_ber(original_labels, predicted_labels):
     return ber
 
 # 接收器
-def matched_filter_decision(labels, snr_db, SAMPLES_PER_SYMBOL=16):
+def matched_filter_decision(labels, snr_db, n_steps, SAMPLES_PER_SYMBOL=16):
 
-    recovered_signal, baseline_signal = model_test(snr_db) 
+    recovered_signal, baseline_signal = model_test(snr_db, n_steps) 
     # 下采样
     #print(recovered_signal[:10])
     downsampled_model_signal = downsample(recovered_signal, SAMPLES_PER_SYMBOL)
@@ -180,6 +177,7 @@ def plot_ber_curve(output_re_bers, baseline_bers, snr_range, save_path='ber_resu
 
 
 if __name__ == "__main__":
+    n_steps = 30  # 扩散步数
     #标签数据
     label = np.load(r'F:\LJN\bishe\bishe\data\awgn_data\qpsk_labels.npy')  
 
@@ -204,17 +202,17 @@ if __name__ == "__main__":
 
     model_bers = []
     baseline_bers = []
-    snr_range = np.arange(0, 17, 1)
+    snr_range = np.arange(-2, 8, 1)
     for snr_db in snr_range:
         print(f"当前SNR: {snr_db} dB")
-        model_ber, baseline_ber =  matched_filter_decision(label_data_IQ, snr_db - 10*math.log(16,10))
+        model_ber, baseline_ber =matched_filter_decision(label_data_IQ, snr_db - 10*math.log(16,10), n_steps, SAMPLES_PER_SYMBOL=16)
             
         model_bers.append(model_ber)
         baseline_bers.append(baseline_ber)
 
     #绘图
      # 绘制并保存BER曲线
-    plot_ber_curve(model_bers, baseline_bers, snr_range, save_path='ddrm_awgn/ber_result/ber_curve_100.png')
+    plot_ber_curve(model_bers, baseline_bers, snr_range, save_path=f'ddrm/ddrm_awgn/ber_result/ber_curve_nsetps{n_steps}.png')
 
 
 

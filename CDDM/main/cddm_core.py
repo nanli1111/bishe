@@ -136,18 +136,14 @@ class CDDM():
         
         # 获取当前时间步的alpha_bar
         alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)  # 调整形状以匹配x_0
-        
-        # 生成噪声 (如未提供)
-        if eps is None:
-            eps = torch.randn_like(x_0)
-        
+              
         # CDDM前向过程: x_t = sqrt(alpha_bar) * x_0 + sqrt(1-alpha_bar) * W_n * eps
         # 这里W_n * eps 模拟了信道特定的噪声特性
         noise_component = torch.sqrt(1 - alpha_bar) * torch.matmul(W_n, eps.unsqueeze(-1)).squeeze(-1)
         signal_component = torch.sqrt(alpha_bar) * x_0
         
         x_t = signal_component + noise_component
-        return x_t, eps
+        return x_t
 
     def sample_backward(self, y_r, net, h_c, sigma, t_max=None, clip_x0=True):
         """
@@ -237,143 +233,3 @@ class CDDM():
         
         return x_t_minus_1
 
-    def train_step(self, x_0, net, h_c, sigma, optimizer):
-        """
-        CDDM训练步骤 (论文Algorithm 1)
-        训练网络预测添加到信号中的噪声
-        
-        参数:
-            x_0: 原始信号 [batch_size, 2, 48]
-            net: 噪声预测网络
-            h_c: 信道估计 [batch_size, k] 复数
-            sigma: 噪声标准差
-            optimizer: 优化器
-            
-        返回:
-            loss: 训练损失值
-        """
-        net.train()
-        optimizer.zero_grad()
-        
-        # 随机选择时间步
-        batch_size = x_0.shape[0]
-        t = torch.randint(0, self.n_steps, (batch_size,)).to(self.device)
-        
-        # 生成随机噪声
-        eps = torch.randn_like(x_0)
-        
-        # 前向扩散: 对原始信号添加噪声
-        x_t, _ = self.sample_forward(x_0, t, h_c, sigma, eps)
-        
-        # 计算信道矩阵
-        W_s, W_n, h_r = self.compute_W_matrices(h_c, sigma)
-        
-        # 使用网络预测噪声
-        eps_pred = net(x_t, t.unsqueeze(1), h_r)
-        
-        # 计算损失: 预测噪声与真实噪声的MSE (论文公式25)
-        loss = torch.mean((eps - eps_pred) ** 2)
-        
-        # 反向传播和优化
-        loss.backward()
-        optimizer.step()
-        
-        return loss.item()
-
-
-# ============================ 适配的网络定义 ============================
-
-class CDDMNet(nn.Module):
-    """
-    简化的CDDM噪声预测网络 (适配版本)
-    在实际使用中应该用前面定义的 CDDMConvNet 或 CDDMUNet
-    """
-    
-    def __init__(self, input_dim, hidden_dims=[128, 256, 128]):
-        super(CDDMNet, self).__init__()
-        
-        # 这是一个简化版本，实际应该使用前面定义的CDDM网络
-        C, H = 2, 48  # 根据get_signal_shape()
-        
-        self.net = nn.Sequential(
-            nn.Linear(input_dim + 32 + 1, hidden_dims[0]),  # +32 for channel, +1 for time
-            nn.ReLU(),
-            nn.Linear(hidden_dims[0], hidden_dims[1]),
-            nn.ReLU(), 
-            nn.Linear(hidden_dims[1], hidden_dims[2]),
-            nn.ReLU(),
-            nn.Linear(hidden_dims[2], C * H)  # 输出展平
-        )
-        
-    def forward(self, x, t, h_r):
-        # 简化实现 - 实际应该使用卷积网络
-        batch_size = x.shape[0]
-        x_flat = x.view(batch_size, -1)
-        t_flat = t.float()
-        h_flat = h_r.view(batch_size, -1)
-        
-        # 简单拼接特征
-        combined = torch.cat([x_flat, t_flat, h_flat], dim=1)
-        output = self.net(combined)
-        return output.view(batch_size, 2, 48)
-
-
-# ============================ 测试函数 ============================
-
-def test_cddm():
-    """测试CDDM完整功能流程"""
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"使用设备: {device}")
-    
-    # 参数设置
-    n_steps = 1000
-    batch_size = 4
-    
-    # 初始化CDDM
-    cddm = CDDM(device, n_steps=n_steps)
-    print("CDDM模型初始化完成")
-    
-    # 初始化网络 (这里使用简化版，实际应用应该用CDDMConvNet或CDDMUNet)
-    net = CDDMNet(input_dim=2*48)
-    net.to(device)
-    print("噪声预测网络初始化完成")
-    
-    # 生成测试数据
-    # 原始信号: [batch_size, 2, 48] - 模拟I/Q两路信号
-    x_0 = torch.randn(batch_size, 2, 48).to(device)
-    
-    # 信道估计: [batch_size, 24] 复数 - 模拟24个子载波的信道响应
-    h_c = (torch.randn(batch_size, 24).to(device) + 
-           1j * torch.randn(batch_size, 24).to(device))
-    
-    sigma = 0.1  # 噪声标准差
-    
-    print(f"原始信号形状: {x_0.shape}")
-    print(f"信道估计形状: {h_c.shape}")
-    print(f"噪声标准差: {sigma}")
-    
-    # 测试1: 前向扩散过程
-    print("\n1. 测试前向扩散过程...")
-    t = torch.randint(0, n_steps, (batch_size,)).to(device)
-    x_t, eps = cddm.sample_forward(x_0, t, h_c, sigma)
-    print(f"前向扩散: x_0 → x_t, 形状: {x_0.shape} → {x_t.shape}")
-    
-    # 测试2: 训练步骤
-    print("\n2. 测试训练步骤...")
-    optimizer = torch.optim.Adam(net.parameters(), lr=1e-4)
-    loss = cddm.train_step(x_0, net, h_c, sigma, optimizer)
-    print(f"训练损失: {loss:.6f}")
-    
-    # 测试3: 逆向采样 (去噪)
-    print("\n3. 测试逆向采样过程...")
-    y_r = x_t  # 使用加噪信号作为"接收信号"
-    y_denoised = cddm.sample_backward(y_r, net, h_c, sigma)
-    print(f"逆向采样: y_r → y_denoised, 形状: {y_r.shape} → {y_denoised.shape}")
-    
-    # 验证信号形状一致性
-    assert y_denoised.shape == x_0.shape, "去噪后信号形状应该与原始信号一致"
-    print("\n✅ 所有测试通过! CDDM流程完整可用")
-
-
-if __name__ == '__main__':
-    test_cddm()
