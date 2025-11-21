@@ -1,6 +1,3 @@
-# 这个脚本用了和其他测试脚本不同的匹配滤波逻辑，这是一个遗留的“半错误”结构（在代码上做了繁琐而无用的操作，但最终得到了正确的结果，保留这个文件以作纪念。
-
-
 import os
 import torch
 import numpy as np
@@ -26,59 +23,38 @@ rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 #模型去噪
 
-def model_test(snrDB, n_steps):
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ============ 生成 RRC 滤波器 ============
+def generate_rrc_filter(sps, num_taps, alpha):
+    """生成单位能量的RRC滤波器"""
+    # (此函数无需修改)
+    t = np.arange(num_taps) - (num_taps - 1) / 2; t /= sps
+    h = np.zeros_like(t); beta = alpha
+    for i, ti in enumerate(t):
+        if ti == 0: h[i] = 1.0 - beta + (4 * beta / np.pi)
+        elif abs(abs(4 * beta * ti) - 1.0) < 1e-9: h[i] = (beta / np.sqrt(2)) * (((1 + 2 / np.pi) * np.sin(np.pi / (4 * beta))) + ((1 - 2 / np.pi) * np.cos(np.pi / (4 * beta))))
+        else: h[i] = (np.sin(np.pi * ti * (1 - beta)) + 4 * beta * ti * np.cos(np.pi * ti * (1 + beta))) / (np.pi * ti * (1 - (4 * beta * ti)**2))
+    return h / np.sqrt(np.sum(h**2))
 
-    # ======== 配置模型 ========
-    net_cfg = {'type': 'UNet', 'channels': [10, 20, 40, 80], 'pe_dim': 128}
-    model = build_network(net_cfg, n_steps).to(device)
 
-    # 加载训练好的模型权重
-    model.load_state_dict(torch.load(fr'ddrm/ddrm_awgn/results/best_model_epoch_with_n_steps{n_steps}.pth', map_location=device))
-
-    # DDRM 对象
-    ddrm = DDRM(model, n_steps=n_steps, min_beta=1e-4, max_beta=0.02, device=device)
-
-    # 数据加载
-    test_data = QPSKDataset(100000, 120000)
-    test_data.x = add_awgn_noise_np(test_data.x, snrDB)
-    # 确保数据类型为 Float
-    test_data.x = torch.tensor(test_data.x, dtype=torch.float32)
-
-    test_loader =DataLoader(test_data, batch_size=256, shuffle=False)
-
-    # 用于存储所有生成的结果
-    all_generated = []
-    pbar = tqdm(test_loader, desc=f"snrdb: {snr_db}")
+# 匹配滤波+下采样
+def matched_filter(signal, rrc_filter):
     
-     # 遍历 test_loader 中的所有批次
-    for x_sample in pbar:  # 根据你的数据结构调整这里
-        x_sample = x_sample.to(device)  # 将批次数据移动到设备（GPU/CPU）
-
-        # 添加高斯噪声
-        x_denoised = ddrm.denoise(x_sample)
-
-        all_generated.append(x_denoised.cpu().numpy())  # 将去噪后的信号存储到 CPU 上，方便后续处理
-
-
-    # 合并所有结果 (20000, ...)
-    all_generated = np.concatenate(all_generated, axis=0)
-
-    # 重构信号
-    model_signal = np.zeros((len(all_generated)*16,), dtype=np.complex64)
-    baseline_signal = np.zeros((len(all_generated)*16,), dtype=np.complex64)
-
-    for i in range(len(all_generated)):
-        model_signal[16*i:16*i+16] = all_generated[i, 0, 24:40] + 1j*all_generated[i, 1, 24:40]  # 取中间16个点
-        baseline_signal[16*i:16*i+16] = test_data.x[i, 0, 24:40] + 1j*test_data.x[i, 1, 24:40]  # 取中间16个点 
-
-    return  model_signal, baseline_signal
+    filter_len = len(rrc_filter) 
+    
+    # 匹配滤波
+    number, _, wave_len = signal.x.shape
+    filtered_signal = np.zeros((number, 2, wave_len + filter_len - 1))
+    for i in range(number):
+        filtered_signal[i, 0, :] = np.convolve(signal.x[i, 0, :], rrc_filter, mode='full')
+        filtered_signal[i, 1, :] = np.convolve(signal.x[i, 1, :], rrc_filter, mode='full')
+    # 2. 采样
+    sampling_idx = (wave_len // 2) + ((filter_len - 1) // 2)
+    sampled_iq = filtered_signal[:, :, sampling_idx]
+    sampled_complex = sampled_iq[:, 0] + 1j * sampled_iq[:, 1]
+    return sampled_complex
 
 
-# 下采样
-def downsample(signal, SAMPLES_PER_SYMBOL=16):
-    return signal[::SAMPLES_PER_SYMBOL]
 
 # 硬判决
 def decision_making(downsampled_signal, threshold=0):
@@ -129,28 +105,25 @@ def calculate_ber(original_labels, predicted_labels):
     return ber
 
 # 接收器
-def matched_filter_decision(labels, snr_db, n_steps, SAMPLES_PER_SYMBOL=16):
+def matched_filter_decision(labels, snr_db, SAMPLES_PER_SYMBOL=16):
+    rrc_filter = generate_rrc_filter(sps = 16, num_taps = 129, alpha = 0.25)
+    # 数据加载
+    signal = QPSKDataset(0, 100000)
+    signal.x = add_awgn_noise_np(signal.x, snr_db)
+    #  匹配滤波+下采样
+    downsampled_baseline_signal = matched_filter(signal, rrc_filter) 
 
-    recovered_signal, baseline_signal = model_test(snr_db, n_steps) 
-    # 下采样
-    #print(recovered_signal[:10])
-    downsampled_model_signal = downsample(recovered_signal, SAMPLES_PER_SYMBOL)
-    downsampled_baseline_signal = downsample(baseline_signal, SAMPLES_PER_SYMBOL)
     # 硬判决
-    predicted_model_labels = decision_making(downsampled_model_signal)
+
     predicted_baseline_labels = decision_making(downsampled_baseline_signal)
 
     # 确保 labels 和 predicted_labels 都是扁平化的一维数组
-    model_ber = calculate_ber(labels, predicted_model_labels)
     baseline_ber = calculate_ber(labels, predicted_baseline_labels)
-    return model_ber, baseline_ber
+    return baseline_ber
 
 # 绘制BER曲线并保存图像
-def plot_ber_curve(output_re_bers, baseline_bers, snr_range, save_path='ber_result/ber_curve.png'):
+def plot_ber_curve( baseline_bers, snr_range, save_path='ber_result/ber_curve.png'):
     plt.figure(figsize=(12, 8))
-
-    # 绘制模型BER曲线
-    plt.semilogy(snr_range, output_re_bers, 'o-', label='Model')
 
     # 绘制理论BER曲线
     theoretical_bers = [0.5 * erfc(np.sqrt(10 ** (snr_db / 10) / 2)) for snr_db in snr_range]
@@ -184,7 +157,7 @@ if __name__ == "__main__":
     #标签数据
     label = np.load(r'F:\LJN\bishe\bishe\data\awgn_data\qpsk_labels.npy')  
 
-    label_data = label[100000:]
+    label_data = label[0:100000]
 
     # 创建一个空的数组label_data_IQ，形状为(20000, 2)
     label_data_IQ = np.zeros((len(label_data), 2), dtype=int)
@@ -203,31 +176,15 @@ if __name__ == "__main__":
             label_data_IQ[i][0] = 1
             label_data_IQ[i][1] = 0
 
-    model_bers = []
     baseline_bers = []
-    snr_range = np.arange(-2, 8, 1)
+    snr_range = np.arange(-2, 10, 1)
     for snr_db in snr_range:
         print(f"当前SNR: {snr_db} dB")
-        model_ber, baseline_ber =matched_filter_decision(label_data_IQ, snr_db - 10*math.log(16,10), n_steps, SAMPLES_PER_SYMBOL=16)
-            
-        model_bers.append(model_ber)
+        baseline_ber =matched_filter_decision(label_data_IQ, snr_db - 10*math.log(16,10), SAMPLES_PER_SYMBOL=16)
+
         baseline_bers.append(baseline_ber)
 
     #绘图
      # 绘制并保存BER曲线
-    plot_ber_curve(model_bers, baseline_bers, snr_range, save_path=f'ddrm/ddrm_awgn/ber_result/ber_curve_nsetps{n_steps}.png')
-
-
-
-
-
-        
-
-
-    
-
-
-
-
-
+    plot_ber_curve(baseline_bers, snr_range, save_path=f'ddrm/ddrm_awgn/ber_result/baseline.png')
 

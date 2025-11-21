@@ -125,5 +125,5 @@ if __name__ == "__main__":
         train_loader, val_loader,
         epochs=epochs, lr=lr,
         device=device,
-        save_dir='ddrm/ddrm_nak/results'
+        save_dir='ddrm/ddrm_rayleigh/results'
     )
