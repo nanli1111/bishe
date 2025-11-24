@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-
+from tqdm import tqdm
 class CDDM():
     """
     Channel Denoising Diffusion Models (CDDM) - 信道去噪扩散模型
@@ -163,11 +163,11 @@ class CDDM():
         """
         # 确定最优采样步数
         m = self.get_sampling_steps(sigma, t_max)
-        print(f"使用采样步数: {m}")
+        #tqdm.write(f"使用采样步数: {m}")
         
         # 从接收信号开始逆向过程 (x_m = y_r)
         x_t = y_r.clone()
-        net = net.to(self.device)
+        #net = net.to(self.device)
         
         # 计算信道矩阵
         W_s, W_n, h_r = self.compute_W_matrices(h_c, sigma)
@@ -179,7 +179,8 @@ class CDDM():
         # 最后一步 t=1: 直接估计原始信号
         t_tensor = torch.tensor([1] * x_t.shape[0], dtype=torch.long).to(self.device).unsqueeze(1)
         eps_pred = net(x_t, t_tensor, h_r)  # 预测噪声
-        z = torch.matmul(W_n, eps_pred.unsqueeze(-1)).squeeze(-1)  # 应用噪声权重
+        z_flat = torch.matmul(W_n, eps_pred.unsqueeze(-1)).squeeze(-1)  # 应用噪声权重
+        z = z_flat.view_as(x_t)  # [B, 2, L]
         y = (x_t - torch.sqrt(1 - self.alpha_bars[1]) * z) / torch.sqrt(self.alpha_bars[1])
         
         return y
@@ -208,8 +209,8 @@ class CDDM():
         eps_pred = net(x_t, t_tensor, h_r)
         
         # 计算 z = W_n * eps_pred (信道加权的预测噪声)
-        z = torch.matmul(W_n, eps_pred.unsqueeze(-1)).squeeze(-1)
-        
+        z_flat = torch.matmul(W_n, eps_pred.unsqueeze(-1)).squeeze(-1)
+        z = z_flat.view_as(x_t)  # [B, 2, L]
         if t > 1:
             # 估计原始信号 x_0
             x_0_est = (x_t - torch.sqrt(1 - self.alpha_bars[t]) * z) / torch.sqrt(self.alpha_bars[t])
