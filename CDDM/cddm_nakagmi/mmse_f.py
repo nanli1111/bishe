@@ -29,14 +29,16 @@ def matched_filter(signal_y, rrc_filter):
     N, _, L = signal_y.shape
     sampling_idx = len(rrc_filter) // 2 
     sampled = np.zeros(N, dtype=complex)
-    start = (L // 2)
-    end = start + 16 
+    s = 0
+    start = (L // 2) - s
+    end = start + 16 + s
 
     for i in range(N):
         i_conv = np.convolve(signal_y[i, 0, start:end], rrc_filter, mode='full')
         q_conv = np.convolve(signal_y[i, 1, start:end], rrc_filter, mode='full')
-        sampled[i] = i_conv[sampling_idx] + 1j * q_conv[sampling_idx]
+        sampled[i] = i_conv[s + sampling_idx] + 1j * q_conv[s + sampling_idx]
     return sampled
+
 
 def mmse_equalization(rx_complex, h_est, snr_db):
     """MMSE均衡"""
@@ -76,8 +78,8 @@ def run_simulation(y_clean, h_est, true_bits, snr_db, rrc_filter):
 if __name__ == "__main__":
     # 配置
     start, end = 0, 100000
-    label_path = r'F:\LJN\bishe\bishe\data\rayleigh_data\labels.npy'
-    save_dir = 'CDDM/cddm_rayleigh/ber_result'
+    label_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
+    save_dir = 'CDDM/cddm_nakagmi/ber_result'
     
     # 1. 预加载数据 (移出循环以提升性能)
     print("Loading data...")

@@ -171,7 +171,7 @@ class UAVBaseDatasetGenerator:
         all_impaired_windows, all_clean_windows, all_labels = [], [], []
         all_true_h, all_estimated_h = [], []
 
-        # 2. 生成受损数据
+        # 2. 生成干净数据
         clean_stream, delay_chunk = self.pulse_shaping(symbols)
 
         # 应用瑞利衰落

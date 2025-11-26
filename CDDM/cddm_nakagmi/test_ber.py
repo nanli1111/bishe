@@ -86,9 +86,9 @@ def cddm_run_chain(snr_db_sample, cddm, model, rx_faded, h_np, true_bits, batch_
     sigma_y = math.sqrt(n0 / 2.0)
 
     # MMSE 均衡：得到等效接收 r，作为 y_r
-    rx_eq = mmse_equalization(rx_noisy, h_np, snr_db_sample)  # [N,2,L]
+    #rx_eq = mmse_equalization(rx_noisy, h_np, snr_db_sample)  # [N,2,L]
 
-    y_all = torch.from_numpy(rx_eq).float().to(device)   # [N,2,L] 均衡后信号
+    y_all = torch.from_numpy(rx_noisy).float().to(device)   # [N,2,L] 均衡后信号
     h_all = torch.from_numpy(h_np).float().to(device)    # [N,2]
 
     recovered = []

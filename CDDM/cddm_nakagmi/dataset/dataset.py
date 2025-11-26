@@ -9,7 +9,7 @@ class QPSKDataset(Dataset):
         # 假设数据存储在文件中，读取数据
         self.x = np.load(r'F:\LJN\bishe\bishe\data\nakagmi_data\clean_waveforms.npy')
         self.y= np.load(r'F:\LJN\bishe\bishe\data\nakagmi_data\impaired_waveforms.npy')
-        self.z = np.load(r'F:\LJN\bishe\bishe\data\nakagmi_data\estimated_h.npy')
+        self.z = np.load(r'F:\LJN\bishe\bishe\data\nakagmi_data\true_h.npy')
         self.x = self.x[start_samples:end_samples]  # 切割指定的样本范围
         self.y = self.y[start_samples:end_samples]  # 切割指定的样本范围
         self.z = self.z[start_samples:end_samples]  # 切割指定的样本范围

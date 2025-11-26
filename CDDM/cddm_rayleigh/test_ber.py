@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+import csv  # 新增：引入 csv 模块
 
 from model.unet import UNet
 from cddm_core import CDDM
@@ -207,15 +208,34 @@ if __name__ == "__main__":
         )
         model_bers.append(ber)
 
-    # ===== 5. 参考 BER（先沿用你 DDRM 的那组） =====
-    ref_bers = [
-        0.325059, 0.313570, 0.301576, 0.290163,
-        0.281074, 0.271785, 0.262691, 0.255602,
-        0.249684, 0.244232, 0.239477, 0.235854,
-        0.232577, 0.229836, 0.227602, 0.226255,
-    ]
+    # ===== 5. 参考 BER：从 baseline_ber.csv 读取 (修改部分) =====
+    # 确保路径正确，之前生成的 CSV 应该在 'CDDM/cddm_rayleigh/ber_result/baseline_ber.csv'
+    csv_path = 'CDDM/cddm_rayleigh/ber_result/baseline_ber.csv'
+    ref_snrs = []
+    ref_bers = []
+    
+    if os.path.exists(csv_path):
+        print(f"Loading Baseline BER from {csv_path}...")
+        with open(csv_path, 'r', newline='') as f:
+            reader = csv.DictReader(f)   # 要求表头里有 snr_db, baseline_ber
+            for row in reader:
+                ref_snrs.append(float(row['snr_db']))
+                ref_bers.append(float(row['baseline_ber']))
+    else:
+        print(f"Warning: CSV file {csv_path} not found! Using empty reference.")
+        # 如果找不到文件，ref_snrs 和 ref_bers 为空，画图时可能需要处理
 
     # ===== 6. 画 BER 曲线 =====
     save_path = f'cddm/cddm_rayleigh/ber_result/ber_curve_nsteps{n_steps}.png'
-    plot_ber(model_bers, ref_bers, snr_range, save_path)
+    
+    # 注意：这里使用 ref_snrs 作为 x 轴参考，确保你的仿真循环 snr_range 与 CSV 中的一致
+    # 如果 CSV 数据与当前扫描范围不一致，画图可能会有视觉上的错位，建议 ref_snrs 和 snr_range 保持一致
+    plot_x_axis = ref_snrs if len(ref_snrs) == len(model_bers) else snr_range
+    
+    plot_ber(
+        model_bers,
+        ref_bers,
+        plot_x_axis,  # 使用 CSV 的 SNR 或者 当前扫描的 SNR
+        save_path=save_path
+    )
     print(f"✅ BER 曲线已保存到: {save_path}")
