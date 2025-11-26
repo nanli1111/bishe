@@ -12,46 +12,6 @@ from cddm_core import CDDM
 from dataset.dataset import get_train_QPSKdataloader 
 
 
-def build_h_from_dataset(raw_h, k, device):
-    """
-    将数据集中读出的 h（实/虚两路）转换为 [B, k] 的复数信道向量。
-
-    raw_h: [B, 2] 或 [B, 2, Lh] 或 [B, 2, 1]
-           - 第 0 维: 实部
-           - 第 1 维: 虚部
-    k:     目标长度（与 x_flat 的一半一致）
-    """
-    raw_h = raw_h.to(device)
-
-    # [B, 2] -> [B, 2, 1]
-    if raw_h.dim() == 2:
-        raw_h = raw_h.unsqueeze(-1)
-
-    B, C2, Lh = raw_h.shape
-    assert C2 == 2, f"h_c 形状不对，期望第二维=2(实/虚)，实际为 {C2}"
-
-    # 第一通道当实部，第二通道当虚部
-    h_real = raw_h[:, 0, :]    # [B, Lh]
-    h_imag = raw_h[:, 1, :]    # [B, Lh]
-
-    # 如果只有一个 tap，就在时间/子载波维度上 repeat 到 k
-    if Lh == 1:
-        h_real = h_real.repeat(1, k)      # [B, k]
-        h_imag = h_imag.repeat(1, k)
-    elif Lh != k:
-        # 长度和 k 不一致，就简单做 tile / 截断
-        if Lh > k:
-            h_real = h_real[:, :k]
-            h_imag = h_imag[:, :k]
-        else:
-            repeat_times = (k + Lh - 1) // Lh
-            h_real = h_real.repeat(1, repeat_times)[:, :k]
-            h_imag = h_imag.repeat(1, repeat_times)[:, :k]
-
-    h_c = torch.complex(h_real, h_imag)   # [B, k]
-    return h_c
-
-
 def train_cddm(model,
                cddm,
                train_loader,
@@ -100,8 +60,13 @@ def train_cddm(model,
             k = two_k // 2                        # 子载波数量 / 序列长度
 
             # 用数据集里的 h 构造 [B, k] 的复信道向量
-            h_c = build_h_from_dataset(h_raw, k, device)   # [B, k]
-
+            seq_len = x.size(2)
+            h = h_raw[:, :, np.newaxis]         # (N,2,1)
+            # 将最后一维从 1 repeat 到 48
+            h = h.repeat(1, 1, seq_len) # (N, 2, 48）
+            h_real = h[:, 0, :]      # [B,L]
+            h_imag = h[:, 1, :]      # [B,L]
+            h_c = torch.complex(h_real, h_imag)   # [B,L]
             # 1) 随机时间步 t ∈ {1,...,n_steps-1}
             t = torch.randint(1, cddm.n_steps, (B,), device=device).long()
 
@@ -173,7 +138,13 @@ def train_cddm(model,
                 two_k = x_flat.size(1)
                 k = two_k // 2
 
-                h_c = build_h_from_dataset(h_raw, k, device)
+                seq_len = x.size(2)
+                h = h_raw[:, :, np.newaxis]         # (N,2,1)
+                # 将最后一维从 1 repeat 到 48
+                h = h.repeat(1, 1, seq_len) # (N, 2, 48）
+                h_real = h[:, 0, :]      # [B,L]
+                h_imag = h[:, 1, :]      # [B,L]
+                h_c = torch.complex(h_real, h_imag)   # [B,L]
 
                 t = torch.randint(1, cddm.n_steps, (B,), device=device).long()
 
@@ -253,7 +224,7 @@ def train_cddm(model,
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_steps = 100        # 扩散步数
+    n_steps = 150        # 扩散步数
     batch_size = 64
     epochs = 1000
     lr = 1e-4
@@ -287,7 +258,7 @@ if __name__ == "__main__":
         train_loader, val_loader,
         epochs=epochs, lr=lr,
         device=device,
-        save_dir='cddm/results',
+        save_dir='CDDM/cddm_rayleigh/results',
         patience=10,
-        sigma=0.3
+        sigma=0.6
     )

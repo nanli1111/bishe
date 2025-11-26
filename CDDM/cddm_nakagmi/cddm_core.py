@@ -163,7 +163,7 @@ class CDDM():
         """
         # 确定最优采样步数
         m = self.get_sampling_steps(sigma, t_max)
-        #tqdm.write(f"使用采样步数: {m}")
+        tqdm.write(f"使用采样步数: {m}")
         
         # 从接收信号开始逆向过程 (x_m = y_r)
         x_t = y_r.clone()

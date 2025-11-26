@@ -5,7 +5,8 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
-
+import csv
+#自定义模块
 from model.unet import UNet
 from cddm_core import CDDM
 from dataset.dataset import QPSKDataset
@@ -46,6 +47,7 @@ def mmse_equalization(received_signal, channel_estimates, snr_db):
     """
     # I/Q -> 复数
     y_complex = received_signal[:, 0, :] + 1j * received_signal[:, 1, :]  # [N,L]
+
     h_complex = channel_estimates[:, 0, :] + 1j * channel_estimates[:, 1, :]    # [N]
 
     snr_linear = 10 ** (snr_db / 10.0)
@@ -70,6 +72,10 @@ def cddm_run_chain(snr_db_sample, cddm, model, rx_faded, h_np, true_bits, batch_
     device = cddm.device
     n, _, L = rx_faded.shape
 
+    seq_len = rx_faded.shape[2]
+    h_np = h_np[:, :, np.newaxis]         # (N,2,1)
+    # 将最后一维从 1 repeat 到 48
+    h_np = np.repeat(h_np, seq_len, axis=-1)  # (N, 2, 48）
     # 在“已有衰落”的波形上叠加 AWGN
     rx_noisy = add_awgn_noise_np(rx_faded, snr_db_sample)
 
@@ -145,7 +151,7 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_steps = 60
+    n_steps = 150
     batch_size = 4096
     sps = 16  # 每符号采样点数
 
@@ -158,7 +164,7 @@ if __name__ == "__main__":
         in_channels=4,         # 2 路 x_t + 2 路 h_r
     ).to(device)
 
-    ckpt_path = f'cddm/results/best_model_epoch_with_n_steps{n_steps}.pth'
+    ckpt_path = f'cddm/cddm_nakagmi/results/best_model_epoch_with_n_steps{n_steps}.pth'
     print(f"加载模型权重: {ckpt_path}")
     model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
@@ -171,14 +177,14 @@ if __name__ == "__main__":
     )
 
     # ===== 2. 加载数据：这里 y 本身已经包含瑞利衰落 =====
-    data = QPSKDataset(400000, 500000)
+    data = QPSKDataset(100000, 200000)
     rx_faded = data.y   # [N,2,L]：已经过瑞利衰落
     h_np = data.z       # [N,2]：真实信道系数（实部/虚部）
     n_win = rx_faded.shape[0]
 
     # ===== 3. 加载符号标签并转成比特 =====
-    label = np.load(r'F:\LJN\bishe\bishe\data\rayleigh_data\labels.npy')
-    label_seg = label[400000:400000 + n_win]
+    label = np.load(r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy')
+    label_seg = label[100000:100000 + n_win]
     map_label = {0: (0, 0), 1: (0, 1), 2: (1, 1), 3: (1, 0)}
     true_bits = np.array([map_label[int(v)] for v in label_seg], dtype=int)
 
@@ -202,15 +208,24 @@ if __name__ == "__main__":
         )
         model_bers.append(ber)
 
-    # ===== 5. 参考 BER（先沿用你 DDRM 的那组） =====
-    ref_bers = [
-        0.325059, 0.313570, 0.301576, 0.290163,
-        0.281074, 0.271785, 0.262691, 0.255602,
-        0.249684, 0.244232, 0.239477, 0.235854,
-        0.232577, 0.229836, 0.227602, 0.226255,
-    ]
+    # ===== 5. 参考 BER：从 baseline_ber.csv 读取 =====
+    csv_path = 'CDDM/cddm_rayleigh/ber_result/baseline_ber.csv'
+    ref_snrs = []
+    ref_bers = []
+    with open(csv_path, 'r', newline='') as f:
+        reader = csv.DictReader(f)   # 要求表头里有 snr_db, baseline_ber
+        for row in reader:
+            ref_snrs.append(float(row['snr_db']))
+            ref_bers.append(float(row['baseline_ber']))
+
 
     # ===== 6. 画 BER 曲线 =====
-    save_path = f'cddm/results/ber_result/ber_curve_nsteps{n_steps}.png'
-    plot_ber(model_bers, ref_bers, snr_range, save_path)
+    save_path = f'cddm/cddm_nakagmi/ber_result/ber_curve_nsteps{n_steps}.png'
+    plot_ber(
+        model_bers,
+        ref_bers,
+        ref_snrs,  # 用 CSV 里的 SNR 做横轴
+        save_path=f'cddm/cddm_nakagmi/ber_result/ber_curve_nsteps{n_steps}.png'
+    )
+
     print(f"✅ BER 曲线已保存到: {save_path}")

@@ -195,5 +195,5 @@ if __name__ == "__main__":
 
     #绘图
      # 绘制并保存BER曲线
-    plot_ber_curve(baseline_bers, snr_range, save_path=f'CDDM/ber_result/baseline.png')
+    plot_ber_curve(baseline_bers, snr_range, save_path=f'CDDM/cddm_rayleigh/ber_result/baseline.png')
 
