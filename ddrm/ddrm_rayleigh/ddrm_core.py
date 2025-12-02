@@ -5,7 +5,7 @@ import torch.nn.functional as F
 class DDRM(nn.Module):
     def __init__(self, model, n_steps=100, min_beta=1e-4, max_beta=0.02, device='cuda'):
         """
-        model: UNet 或 ConvNet
+        model: UNet (in_channels=6, out_channels=2)
         n_steps: 扩散步数
         min_beta, max_beta: beta调度范围
         device: 'cuda' 或 'cpu'
@@ -15,72 +15,115 @@ class DDRM(nn.Module):
         self.n_steps = n_steps
         self.device = device
 
-        # ======== 调度器（保持和原DDPM一致） ========
+        # ======== 调度器 (标准 DDPM) ========
         betas = torch.linspace(min_beta, max_beta, n_steps).to(device)
         alphas = 1 - betas
-        alpha_bars = torch.empty_like(alphas)
-        product = 1
-        for i, alpha in enumerate(alphas):
-            product *= alpha
-            alpha_bars[i] = product
-        alpha_prev = torch.empty_like(alpha_bars)
-        alpha_prev[1:] = alpha_bars[:-1]
-        alpha_prev[0] = 1
-
-        self.register_buffer('betas', betas)              # β_t
-        self.register_buffer('alphas', alphas)            # α_t
-        self.register_buffer('alpha_bars', alpha_bars)    # \barα_t
-        self.register_buffer('alpha_prev', alpha_prev)    # \barα_{t-1}
-        # 这两个 coef1/coef2 是你之前写的那套 DDPM 形式
+        alpha_bars = torch.cumprod(alphas, dim=0)
+        
+        alpha_prev = torch.cat([torch.tensor([1.0], device=device), alpha_bars[:-1]])
+        
+        # 记录关键系数
+        self.register_buffer('betas', betas)
+        self.register_buffer('alphas', alphas)
+        self.register_buffer('alpha_bars', alpha_bars)
+        self.register_buffer('alpha_prev', alpha_prev)
+        
+        # 预计算 posterior 均值系数 (用于 q_posterior_mean)
+        self.register_buffer('sqrt_alphas_cumprod', torch.sqrt(alpha_bars))
+        self.register_buffer('sqrt_one_minus_alphas_cumprod', torch.sqrt(1. - alpha_bars))
+        
+        # 用于标准 DDPM 采样的系数
         self.register_buffer('coef1', torch.sqrt(alphas) * (1 - alpha_prev) / (1 - alpha_bars))
         self.register_buffer('coef2', torch.sqrt(alpha_prev) * betas / (1 - alpha_bars))
 
-    # ------------------ 训练用前向扩散 & loss ------------------
-    def q_sample(self, x0, t, noise=None):
-        """前向加噪: x_t = sqrt(alpha_bar_t) * x0 + sqrt(1-alpha_bar_t) * noise"""
-        if noise is None:
-            noise = torch.randn_like(x0)
-        # t: [B]，alpha_bar: [B,1,1]
-        alpha_bar = self.alpha_bars[t].view(-1, 1, 1)
-        return torch.sqrt(alpha_bar) * x0 + torch.sqrt(1 - alpha_bar) * noise
+    # ------------------ 辅助函数 ------------------
+    def extract(self, a, t, x_shape):
+        """提取系数并广播到 x 的维度"""
+        batch_size = t.shape[0]
+        out = a.gather(-1, t)
+        return out.reshape(batch_size, *((1,) * (len(x_shape) - 1)))
 
-    def p_losses(self, x0, t):
-        """训练损失: 预测噪声 ε"""
-        noise = torch.randn_like(x0)
-        x_noisy = self.q_sample(x0, t, noise)
-        noise_pred = self.model(x_noisy, t)
-        return F.mse_loss(noise_pred, noise)
+    # ------------------ 训练用接口 (手动构造输入) ------------------
+    # 注意：原本的 p_losses 只接受 x0，现在我们是在 train.py 中手动实现训练循环
+    # 所以这里不需要 p_losses，或者可以留作参考但不会被 train_ddrm_cfg 调用。
+    # 我们保留一个简单的 forward 作为兼容
+    def forward(self, x_t, y, h, t):
+        """
+        前向传播：构造 6 通道输入并预测噪声
+        x_t: [B, 2, L] 当前噪声状态
+        y:   [B, 2, L] 接收信号条件
+        h:   [B, 2, L] 信道条件
+        """
+        net_input = torch.cat([x_t, y, h], dim=1)
+        return self.model(net_input, t)
+    # ------------------ 纯条件 DDIM 采样 (推荐用于显式条件模型) ------------------
+    # ddrm_core.py 中的 DDRM 类新增方法
 
-    # ------------------ 原来的无条件去噪（先验采样器） ------------------
     @torch.no_grad()
-    def denoise(self, x_noisy):
+    def sample_pure_conditional(self, y, h, eta=0.0, guidance_scale=1.0):
         """
-        纯先验 DDPM 逆扩散去噪（不使用信道观测）
-        x_noisy: 输入带噪信号，shape [B, 2, L]
+        DDRM 纯条件采样 (适配显式信道注入 + CFG)
+        y: [B, 2, L] 含噪观测
+        h: [B, 2] 或 [B, 2, L] 信道
+        guidance_scale: CFG 强度
         """
-        x = x_noisy.to(self.device)
+        device = self.device
+        y = y.to(device)
+        h = h.to(device)
+        B, _, L = y.shape
 
-        for t in reversed(range(self.n_steps)):
-            n = x.shape[0]
-            t_tensor = torch.full((n,), t, device=self.device, dtype=torch.long)
-            eps = self.model(x, t_tensor)   # 预测噪声 ε_θ(x_t, t)
+        # 1. 扩展 h 维度
+        if h.dim() == 2:
+            h_expanded = h.unsqueeze(-1).repeat(1, 1, L)
+        else:
+            h_expanded = h
 
-            if t > 0:
-                z = torch.randn_like(x)
-            else:
-                z = 0
+        # 2. 随机初始化 x_T
+        x = torch.randn_like(y)
+        
+        # 3. 准备时间步 (倒序 T-1 -> 0)
+        step_indices = list(range(self.n_steps - 1, -1, -1))
 
-            # 从 ε 反推 x0 估计
-            x0_pred = (x - torch.sqrt(1 - self.alpha_bars[t]) * eps) / torch.sqrt(self.alpha_bars[t])
-            x0_pred = torch.clip(x0_pred, -1, 1)
+        # 4. 采样循环
+        for t_idx in step_indices:
+            t_tensor = torch.full((B,), t_idx, device=device, dtype=torch.long)
 
-            # 标准 DDPM 形式的后验均值
-            mean = self.coef1[t] * x + self.coef2[t] * x0_pred
-            x = mean + torch.sqrt(self.betas[t]) * z
+            # --- A. 构造 CFG 输入 (Concat) ---
+            # Conditional: [x, y, h]
+            # Unconditional: [x, 0, 0]
+            x_in = torch.cat([x, x], dim=0)
+            y_in = torch.cat([y, torch.zeros_like(y)], dim=0)
+            h_in = torch.cat([h_expanded, torch.zeros_like(h_expanded)], dim=0)
+            t_in = torch.cat([t_tensor, t_tensor], dim=0)
+            
+            # 6通道输入 [2B, 6, L]
+            net_input = torch.cat([x_in, y_in, h_in], dim=1)
+            
+            # --- B. 预测噪声 ---
+            noise_pred_double = self.model(net_input, t_in)
+            eps_cond, eps_uncond = noise_pred_double.chunk(2, dim=0)
+            
+            # CFG 组合
+            eps = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
+
+            # --- C. DDIM 更新 ---
+            alpha_bar = self.alpha_bars[t_idx]
+            alpha_bar_prev = self.alpha_bars[t_idx - 1] if t_idx > 0 else torch.tensor(1.0).to(device)
+            
+            # 预测 x0
+            pred_x0 = (x - torch.sqrt(1 - alpha_bar) * eps) / torch.sqrt(alpha_bar)
+            
+            # 幅度截断 (防止毛刺)
+            pred_x0 = torch.clamp(pred_x0, -2.0, 2.0)
+            
+            # 指向 x_{t-1} 的方向 (eta=0, sigma=0)
+            dir_xt = torch.sqrt(1 - alpha_bar_prev) * eps
+            
+            # 更新 x
+            x = torch.sqrt(alpha_bar_prev) * pred_x0 + dir_xt
 
         return x
-
-    # ------------------ 新增：带信道约束的 DDRM 恢复 ------------------
+    # ------------------ DDRM 恢复 (关键逻辑) ------------------
     @torch.no_grad()
     def restore(self,
                 y,
@@ -89,107 +132,126 @@ class DDRM(nn.Module):
                 sigma_p=1.0,
                 eta=0.0,
                 steps=None,
-                init_from='y'):
+                init_from='y',
+                guidance_scale=0.0): # 支持 CFG (可选)
         """
-        DDRM 信道恢复采样器：利用观测 y 和信道 h 约束，恢复干净 x0
+        DDRM 信道恢复采样器
+        结合了 显式条件输入 (Explicit Input) 和 DDRM 的测量一致性 (Measurement Consistency)
 
-        y: [B, 2, L]  I/Q 波形
-        h: [B, 2]     (real, imag)
+        Args:
+            y: [B, 2, L]  含噪观测信号 (Rayleigh + AWGN)
+            h: [B, 2] 或 [B, 2, L] 信道系数
+            sigma_y: 标量，噪声标准差
+            guidance_scale: CFG 强度 (如果训练使用了 CFG)
         """
         device = self.device
         y = y.to(device)
         h = h.to(device)
 
         B, C, L = y.shape
-        assert C == 2, f"expect 2 channels (IQ), got {C}"
+        assert C == 2
 
-        T = int(self.n_steps)
-        if (steps is None) or (steps > T):
-            steps = T
-
-        # 构造一个纯 Python 的时间步列表，避免 GPU linspace 花活
-        if steps == T:
-            step_indices = list(range(T - 1, -1, -1))
+        # 1. 处理 h 维度: 确保是 [B, 2, L]
+        if h.dim() == 2:
+            h_expanded = h.unsqueeze(-1).repeat(1, 1, L) # 用于拼接
         else:
-            import numpy as np
-            step_indices = np.linspace(T - 1, 0, steps, dtype=np.int64).tolist()
-            step_indices = sorted(set(int(t) for t in step_indices), reverse=True)
+            h_expanded = h
+            
+        # 2. 准备时间步
+        T = int(self.n_steps)
+        step_indices = list(range(T - 1, -1, -1)) # 倒序 T-1 -> 0
 
-        alpha_bars = self.alpha_bars    # [T]
-        betas      = self.betas         # [T]
-        coef1      = self.coef1         # [T]
-        coef2      = self.coef2         # [T]
-
-        # 初始化 x_T
+        # 3. 初始化 x_T
         if init_from == 'y':
-            x_t = y.clone()             # [B,2,L]
+            # 从观测信号初始化 (通常对去噪任务有效)
+            x_t = y.clone() 
         elif init_from == 'rand':
+            # 标准高斯噪声初始化
             x_t = torch.randn_like(y)
         else:
-            raise ValueError(f"init_from must be 'y' or 'rand', got {init_from}")
+            raise ValueError(f"Unknown init_from: {init_from}")
 
+        # 4. 预计算常数 (用于 DDRM 更新公式)
         sigma_y2 = float(sigma_y) ** 2
         sigma_p2 = float(sigma_p) ** 2
+        
+        # h 的复数形式处理 (用于 Data Consistency)
+        # 假设 h_expanded 是 [B, 2, L]
+        h_r_map = h_expanded[:, 0, :] # [B, L]
+        h_i_map = h_expanded[:, 1, :] # [B, L]
+        abs_h2_map = h_r_map**2 + h_i_map**2 # [B, L]
 
-        # h: [B,2] -> [B,1,1]
-        h_r = h[:, 0].view(B, 1, 1)
-        h_i = h[:, 1].view(B, 1, 1)
-        abs_h2 = h_r ** 2 + h_i ** 2       # [B,1,1]
+        # y 的复数形式处理
+        y_r_map = y[:, 0, :]
+        y_i_map = y[:, 1, :]
 
-        # y: [B,2,L] -> [B,1,L]
-        y_r = y[:, 0, :].unsqueeze(1)      # [B,1,L]
-        y_i = y[:, 1, :].unsqueeze(1)      # [B,1,L]
+        # 5. 逆扩散循环
+        for t_idx in step_indices:
+            t_tensor = torch.full((B,), t_idx, device=device, dtype=torch.long)
+            
+            # --- A. 预测噪声 (CFG 支持) ---
+            if guidance_scale > 0:
+                # 构造 Unconditional Input (丢弃 y 和 h)
+                x_in = torch.cat([x_t, x_t], dim=0)
+                y_in = torch.cat([y, torch.zeros_like(y)], dim=0)
+                h_in = torch.cat([h_expanded, torch.zeros_like(h_expanded)], dim=0)
+                t_in = torch.cat([t_tensor, t_tensor], dim=0)
+                
+                # 拼接输入 [2B, 6, L]
+                net_input = torch.cat([x_in, y_in, h_in], dim=1)
+                
+                noise_pred = self.model(net_input, t_in)
+                eps_cond, eps_uncond = noise_pred.chunk(2, dim=0)
+                
+                eps = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
+            else:
+                # 标准 Conditional Input
+                # 必须拼接 6 通道: [x_t, y, h]
+                net_input = torch.cat([x_t, y, h_expanded], dim=1)
+                eps = self.model(net_input, t_tensor)
 
-        for t_int in step_indices:
-            alpha_bar_t = alpha_bars[t_int]          # 标量 tensor
-            sqrt_ab_t = torch.sqrt(alpha_bar_t)
-            sqrt_one_minus_ab_t = torch.sqrt(1.0 - alpha_bar_t)
-
-            # 1) 先验步：x_t → x0_hat
-            t_tensor = torch.full((B,), t_int, device=device, dtype=torch.long)
-            eps = self.model(x_t, t_tensor)          # [B,2,L]
-
-            x0_hat = (x_t - sqrt_one_minus_ab_t * eps) / sqrt_ab_t   # [B,2,L]
-            x0_hat = torch.clamp(x0_hat, -1., 1.)
-
-            x0_r = x0_hat[:, 0, :]    # [B,L]
-            x0_i = x0_hat[:, 1, :]    # [B,L]
-
-            # 2) 数据一致性步：在 x0 空间做高斯后验 -> x0_dc
-            # conj(h)*y
-            hy_r = h_r * y_r + h_i * y_i          # [B,1,L]
-            hy_i = h_r * y_i - h_i * y_r          # [B,1,L]
-
-            hy_r = hy_r.squeeze(1)                # [B,L]
-            hy_i = hy_i.squeeze(1)                # [B,L]
-
-            # denom: [B,1]，只在“用户”维度上不同，时间维统一
-            denom = (sigma_y2 + sigma_p2 * abs_h2).view(B, 1)   # [B,1]
-
-            x0_dc_r = (sigma_y2 * x0_r + sigma_p2 * hy_r) / denom  # [B,L]
-            x0_dc_i = (sigma_y2 * x0_i + sigma_p2 * hy_i) / denom  # [B,L]
-
-            x0_dc = torch.stack([x0_dc_r, x0_dc_i], dim=1)   # [B,2,L]
-            x0_dc = torch.clamp(x0_dc, -1., 1.)
-
-            # 关键断言：防止再出现 [B,2,B,L] 这种形状
-            assert x_t.shape == x0_dc.shape, \
-                f"x_t shape {x_t.shape}, x0_dc shape {x0_dc.shape}"
-
-            # 3) 从 x0_dc 走一步到 x_{t-1}
-            beta_t  = betas[t_int]
-            coef1_t = coef1[t_int]
-            coef2_t = coef2[t_int]
-
-            mean = coef1_t * x_t + coef2_t * x0_dc   # [B,2,L]
-
-            if t_int > 0:
-                if eta > 0:
-                    sigma_t = eta * torch.sqrt(beta_t)
-                else:
-                    sigma_t = torch.sqrt(beta_t)
-                noise = sigma_t * torch.randn_like(x_t)
-                x_t = mean + noise
+            # --- B. DDRM 更新逻辑 (利用物理模型修正 x0) ---
+            
+            # 1. Tweaked x0 estimation (从 eps 反推 x0)
+            # x0_hat = (x_t - sqrt(1-alpha_bar) * eps) / sqrt(alpha_bar)
+            alpha_bar_t = self.alpha_bars[t_idx]
+            sqrt_ab = torch.sqrt(alpha_bar_t)
+            sqrt_one_minus_ab = torch.sqrt(1 - alpha_bar_t)
+            
+            x0_hat = (x_t - sqrt_one_minus_ab * eps) / sqrt_ab
+            
+            # 2. Data Consistency (在 x0 空间融合观测 y)
+            # 公式: x0_new = (sigma_y^2 * x0_hat + sigma_p^2 * h^* y) / (sigma_y^2 + sigma_p^2 * |h|^2)
+            
+            # 分离 I/Q
+            x0_r = x0_hat[:, 0, :]
+            x0_i = x0_hat[:, 1, :]
+            
+            # 计算 h^* y (复数乘法: (hr - j hi)(yr + j yi) = (hr yr + hi yi) + j(hr yi - hi yr))
+            hy_r = h_r_map * y_r_map + h_i_map * y_i_map
+            hy_i = h_r_map * y_i_map - h_i_map * y_r_map
+            
+            # 分母
+            denom = sigma_y2 + sigma_p2 * abs_h2_map # [B, L]
+            
+            # 融合
+            x0_dc_r = (sigma_y2 * x0_r + sigma_p2 * hy_r) / (denom + 1e-8) # 加 epsilon 防除零
+            x0_dc_i = (sigma_y2 * x0_i + sigma_p2 * hy_i) / (denom + 1e-8)
+            
+            x0_dc = torch.stack([x0_dc_r, x0_dc_i], dim=1) # [B, 2, L]
+            
+            # 3. 采样下一步 x_{t-1} (DDPM 后验均值)
+            # mean = coef1 * x_t + coef2 * x0_dc
+            c1 = self.coef1[t_idx]
+            c2 = self.coef2[t_idx]
+            beta_t = self.betas[t_idx]
+            
+            mean = c1 * x_t + c2 * x0_dc
+            
+            if t_idx > 0:
+                noise = torch.randn_like(x_t)
+                sigma_t = torch.sqrt(beta_t) * (1.0 if eta == 1.0 else 0.0) # 简单处理 eta
+                x_t = mean + sigma_t * noise
             else:
                 x_t = mean
 

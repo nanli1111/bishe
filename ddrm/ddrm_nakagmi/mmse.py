@@ -1,201 +1,121 @@
 import os
-import torch
-import numpy as np
 import math
-from scipy.special import erfc
-from torch import optim
-from tqdm import tqdm
-from torch.utils.data import Dataset, DataLoader, random_split
-from torchvision.utils import save_image
-
-# 自定义模块
-from model.unet import UNet, build_network
-from ddrm_core import DDRM
-from dataset.dataset import get_test_QPSKdataloader, QPSKDataset 
-from test_fig import add_awgn_noise_np, add_awgn_noise_torch
+import csv
+import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import rcParams
-# 设置支持中文的字体
-rcParams['font.sans-serif'] = ['Microsoft YaHei']  # 选择一个支持中文的字体
-rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+from tqdm import tqdm
+from dataset.dataset import QPSKDataset
+from test_fig import add_awgn_noise_np
 
-# 测试误码率
+# 全局绘图配置
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+plt.rcParams['axes.unicode_minus'] = False
 
-#模型去噪
-
-
-# ============ 生成 RRC 滤波器 ============
 def generate_rrc_filter(sps, num_taps, alpha):
-    """生成单位能量的RRC滤波器"""
-    # (此函数无需修改)
-    t = np.arange(num_taps) - (num_taps - 1) / 2; t /= sps
-    h = np.zeros_like(t); beta = alpha
+    """生成RRC滤波器系数"""
+    t = (np.arange(num_taps) - (num_taps - 1) / 2) / sps
+    h = np.zeros_like(t)
     for i, ti in enumerate(t):
-        if ti == 0: h[i] = 1.0 - beta + (4 * beta / np.pi)
-        elif abs(abs(4 * beta * ti) - 1.0) < 1e-9: h[i] = (beta / np.sqrt(2)) * (((1 + 2 / np.pi) * np.sin(np.pi / (4 * beta))) + ((1 - 2 / np.pi) * np.cos(np.pi / (4 * beta))))
-        else: h[i] = (np.sin(np.pi * ti * (1 - beta)) + 4 * beta * ti * np.cos(np.pi * ti * (1 + beta))) / (np.pi * ti * (1 - (4 * beta * ti)**2))
+        if ti == 0:
+            h[i] = 1.0 - alpha + (4 * alpha / np.pi)
+        elif abs(abs(4 * alpha * ti) - 1.0) < 1e-9:
+            h[i] = (alpha / np.sqrt(2)) * ((1 + 2/np.pi)*np.sin(np.pi/(4*alpha)) + (1 - 2/np.pi)*np.cos(np.pi/(4*alpha)))
+        else:
+            h[i] = (np.sin(np.pi*ti*(1-alpha)) + 4*alpha*ti*np.cos(np.pi*ti*(1+alpha))) / (np.pi*ti*(1-(4*alpha*ti)**2))
     return h / np.sqrt(np.sum(h**2))
 
-
-# 匹配滤波+下采样
-def matched_filter(signal, rrc_filter):
+def matched_filter(signal_y, rrc_filter):
+    """匹配滤波与下采样"""
+    N, _, L = signal_y.shape
+    sampling_idx = (L // 2) + ((len(rrc_filter) - 1) // 2)
+    sampled = np.zeros(N, dtype=complex)
     
-    filter_len = len(rrc_filter) 
+    for i in range(N):
+        i_conv = np.convolve(signal_y[i, 0], rrc_filter, mode='full')
+        q_conv = np.convolve(signal_y[i, 1], rrc_filter, mode='full')
+        sampled[i] = i_conv[sampling_idx] + 1j * q_conv[sampling_idx]
+    return sampled
+
+
+def mmse_equalization(rx_complex, h_est, snr_db):
+    """MMSE均衡"""
+    h_c = h_est[:, 0] + 1j * h_est[:, 1]
+    snr_linear = 10 ** (snr_db / 10.0)
+    w = np.conj(h_c) / (np.abs(h_c)**2 + 1.0/snr_linear)
+    return rx_complex * w
+
+def decision_making(symbols):
+    """硬判决 (Gray Mapping)"""
+    r, i = np.real(symbols), np.imag(symbols)
+    bits = np.zeros((len(symbols), 2), dtype=int)
+    # 0:(+,+), 1:(-,+), 2:(-,-), 3:(+,-)
+    bits[(r > 0) & (i > 0)] = (0, 0)
+    bits[(r < 0) & (i > 0)] = (0, 1)
+    bits[(r < 0) & (i < 0)] = (1, 1)
+    bits[(r > 0) & (i < 0)] = (1, 0)
+    return bits
+
+def calculate_ber(true_bits, pred_bits):
+    return np.sum(true_bits != pred_bits) / true_bits.size
+
+def run_simulation(y_clean, h_est, true_bits, snr_db, rrc_filter):
+    # 1. 加噪 (符号SNR -> 采样SNR)
+    snr_sample = snr_db - 10 * math.log10(16)
+    y_noisy = add_awgn_noise_np(y_clean, snr_sample)
     
-    # 匹配滤波
-    number, _, wave_len = signal.x.shape
-    filtered_signal = np.zeros((number, 2, wave_len + filter_len - 1))
-    for i in range(number):
-        filtered_signal[i, 0, :] = np.convolve(signal.y[i, 0, :], rrc_filter, mode='full')
-        filtered_signal[i, 1, :] = np.convolve(signal.y[i, 1, :], rrc_filter, mode='full')
-    # 2. 采样
-    sampling_idx = (wave_len // 2) + ((filter_len - 1) // 2)
-    sampled_iq = filtered_signal[:, :, sampling_idx]
-    sampled_complex = sampled_iq[:, 0] + 1j * sampled_iq[:, 1]
-    return sampled_complex
-
-# ============ MMSE 均衡器 ============
-def mmse_equalization(received_signal, channel_estimates, snr_db):
-    """MMSE 均衡"""
-
-    channel_estimates_iq = channel_estimates[:,0] + 1j * channel_estimates[:,1]
-    snr_linear = 10 ** (snr_db / 10)
-    w = np.conj(channel_estimates_iq) / (np.abs(channel_estimates_iq) ** 2 + 1 / snr_linear)
-    return received_signal * w
-
-
-# 硬判决
-def decision_making(downsampled_signal, threshold=0):
-
-    real_part = np.real(downsampled_signal)
-    imag_part = np.imag(downsampled_signal)
-
-    decision = np.zeros((len(downsampled_signal),2), dtype=int)
-    #print(real_part[:10])
-    #print(imag_part[:10])
-    for i in range(len(downsampled_signal)):
-        if (real_part[i] > threshold) and (imag_part[i] > threshold):
-            decision[i,0] = 0 
-            decision[i,1] = 0
-        elif (real_part[i] < threshold) and (imag_part[i] > threshold):
-            decision[i,0] = 0 
-            decision[i,1] = 1
-        elif (real_part[i] < threshold) and (imag_part[i] < threshold):
-            decision[i,0] = 1 
-            decision[i,1] = 1
-        elif (real_part[i] > threshold) and (imag_part[i] < threshold):
-            decision[i,0] = 1
-            decision[i,1] = 0
-    #print(decision[:10])
-    return decision
-
-# 计算误码率
-def calculate_ber(original_labels, predicted_labels):
+    # 2. 匹配滤波
+    y_filtered = matched_filter(y_noisy, rrc_filter)
     
-    predicted_labels = predicted_labels.astype(int)
-
+    # 3. MMSE均衡 & 判决
+    y_eq = mmse_equalization(y_filtered, h_est, snr_db)
+    pred_bits = decision_making(y_eq)
     
-    #print(original_labels[:10])
-    #print(predicted_labels[:10])
-    error_num_i = 0
-    error_num_q = 0
-    error_num = 0
-    
-    error_num_i = np.sum(original_labels[:, 0] != predicted_labels[:, 0])
-    error_num_q = np.sum(original_labels[:, 1] != predicted_labels[:, 1])
-
-    error_num = error_num_i + error_num_q
-
-    #print(error_num_i)
-    #print(error_num_q)
-    ber = error_num / (len(original_labels)*2)
-    print(ber)
-    return ber
-
-# 接收器
-def matched_filter_decision(labels, snr_db, SAMPLES_PER_SYMBOL=16):
-    rrc_filter = generate_rrc_filter(sps = 16, num_taps = 129, alpha = 0.25)
-    # 数据加载
-    signal = QPSKDataset(0, 500000)
-
-    # 添加噪声
-    signal.y = add_awgn_noise_np(signal.y, snr_db)
-    
-    #  匹配滤波+下采样
-    downsampled_baseline_signal = matched_filter(signal, rrc_filter) 
-
-    # MMSE均衡
-    channel_estimates = signal.z
-    equalized_signal = mmse_equalization(downsampled_baseline_signal, channel_estimates, snr_db)
-
-    # 硬判决
-    predicted_baseline_labels = decision_making(equalized_signal)
-
-    # 确保 labels 和 predicted_labels 都是扁平化的一维数组
-    baseline_ber = calculate_ber(labels, predicted_baseline_labels)
-    return baseline_ber
-
-# 绘制BER曲线并保存图像
-def plot_ber_curve( baseline_bers, snr_range, save_path='ber_result/ber_curve.png'):
-    plt.figure(figsize=(12, 8))
-
-
-    # 绘制baseline
-    plt.semilogy(snr_range, baseline_bers, 'v-', label='Baseline')
-
-    # 设置横轴仅显示偶数刻度
-    xticks = np.arange(np.ceil(min(snr_range) / 2) * 2, np.floor(max(snr_range) / 2) * 2 + 2, 2)
-    plt.xticks(xticks)
-
-    plt.grid(True, which='both', linestyle='--', alpha=0.7)
-    plt.xlabel('SNR (dB)')
-    plt.ylabel('BER')
-    plt.title('Bit Error Rate vs. SNR (QPSK)')
-    plt.legend()
-
-    # 确保保存目录存在
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    # 保存图像
-    plt.savefig(save_path)
-    plt.close()
-
-
-
+    return calculate_ber(true_bits, pred_bits)
 
 if __name__ == "__main__":
-    n_steps = 30  # 扩散步数
-    #标签数据
-    label = np.load(r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy')  
+    # 配置
+    start, end = 0, 500000
+    label_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
+    save_dir = 'ddrm/ddrm_nakagmi/ber_result'
+    
+    # 1. 预加载数据 (移出循环以提升性能)
+    print("Loading data...")
+    dataset = QPSKDataset(start, end)
+    y_all, z_all = dataset.y, dataset.z
+    
+    full_labels = np.load(label_path)
+    map_dict = {0:(0,0), 1:(0,1), 2:(1,1), 3:(1,0)}
+    true_bits = np.array([map_dict[int(l)] for l in full_labels[start:end]], dtype=int)
 
-    label_data = label[0:500000]
+    # 2. 准备滤波器
+    rrc = generate_rrc_filter(sps=16, num_taps=129, alpha=0.25)
+    
+    # 3. SNR 扫描
+    snr_range = np.arange(2, 18, 1)
+    bers = []
+    
+    print("Running simulation...")
+    for snr in tqdm(snr_range):
+        ber = run_simulation(y_all, z_all, true_bits, snr, rrc)
+        bers.append(ber)
 
-    # 创建一个空的数组label_data_IQ，形状为(20000, 2)
-    label_data_IQ = np.zeros((len(label_data), 2), dtype=int)
-    # 遍历label_data，根据每个标签值更新label_data_IQ
-    for i in range(len(label_data)):
-        if label_data[i] == 0:
-            label_data_IQ[i][0] = 0
-            label_data_IQ[i][1] = 0
-        elif label_data[i] == 1:
-            label_data_IQ[i][0] = 0
-            label_data_IQ[i][1] = 1
-        elif label_data[i] == 2:
-            label_data_IQ[i][0] = 1
-            label_data_IQ[i][1] = 1
-        elif label_data[i] == 3:
-            label_data_IQ[i][0] = 1
-            label_data_IQ[i][1] = 0
-
-    baseline_bers = []
-    snr_range = np.arange(2, 10, 1)
-    for snr_db in snr_range:
-        print(f"当前SNR: {snr_db} dB")
-        baseline_ber =matched_filter_decision(label_data_IQ, snr_db - 10*math.log(16,10), SAMPLES_PER_SYMBOL=16)
-
-        baseline_bers.append(baseline_ber)
-
-    #绘图
-     # 绘制并保存BER曲线
-    plot_ber_curve(baseline_bers, snr_range, save_path=f'ddrm/ddrm_nakagmi/ber_result/baseline.png')
-
+    # 4. 保存与绘图
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # 保存CSV
+    with open(os.path.join(save_dir, 'baseline_ber.csv'), 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['snr_db', 'baseline_ber'])
+        writer.writerows(zip(snr_range, bers))
+    
+    # 绘图
+    plt.figure(figsize=(10, 6))
+    plt.semilogy(snr_range, bers, 'v-', label='Baseline (MMSE)')
+    plt.xticks(np.arange(min(snr_range), max(snr_range)+1, 2))
+    plt.grid(True, which='both', linestyle='--', alpha=0.6)
+    plt.xlabel('SNR (dB)')
+    plt.ylabel('BER')
+    plt.title('Baseline Performance (Rayleigh)')
+    plt.legend()
+    plt.savefig(os.path.join(save_dir, 'baseline.png'))
+    print(f"Done. Results saved to {save_dir}")

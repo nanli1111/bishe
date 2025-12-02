@@ -108,7 +108,7 @@ class UAVBaseDatasetGenerator:
                 impaired_windows.append(impaired_stream[start:end])
                 clean_windows.append(ideal_baseband_stream[start:end])
                 valid_labels.append(labels[i])
-                # 保存窗口中心点的信道信息
+                # 保存窗口的信道信息
                 h_true_windows.append(true_h_stream[peak_pos])
                 h_estimated_windows.append(estimated_h_stream[peak_pos])
         

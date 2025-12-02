@@ -1,145 +1,212 @@
-# test_ddrm_qpsk.py
 import os
-import torch
-import matplotlib.pyplot as plt
-import numpy as np
 import math
-from torchvision.utils import save_image
-from model.unet import UNet, build_network
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import rcParams
+
+# 引入项目模块
+from model.unet import build_network
 from ddrm_core import DDRM
-from dataset.dataset import get_test_QPSKdataloader, get_signal_shape
+from dataset.dataset import QPSKDataset
+
+# 中文字体设置
+rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei']
+rcParams['axes.unicode_minus'] = False
 
 
-# 加噪
+# 加噪函数
 def add_awgn_noise_np(clean_data, EbN0_db):
     noisy_data = np.zeros(clean_data.shape)
-    # 计算信号功率
     signal_power = np.mean((np.abs(clean_data[:,0,:]) ** 2) + (np.abs(clean_data[:,1,:]) ** 2))
     EbN0_linear = 10**(EbN0_db/10)
     N0 = signal_power / EbN0_linear
     noise_std = np.sqrt(N0/2)
-    # 生成I/Q两路独立高斯噪声
     noise_I = noise_std * np.random.randn(*clean_data[:,0,:].shape)
     noise_Q = noise_std * np.random.randn(*clean_data[:,1,:].shape)
-    
-    # 加噪（模拟实际信道）
-    noisy_data[:,0,:] = clean_data[:,0,:] + noise_I;  # I路接收信号
-    noisy_data[:,1,:] = clean_data[:,1,:] + noise_Q;  # Q路接收信号
-
-    return noisy_data
-
-def add_awgn_noise_torch(clean_data, EbN0_db):
-    """
-    clean_data: [batch, 2, length]  torch.Tensor (float, 可在 GPU 上)
-    EbN0_db: 信噪比
-    返回加噪后的信号，类型和设备与输入相同
-    """
-    # 计算信号功率 (I/Q 平均)
-    signal_power = (clean_data[:,0,:].pow(2) + clean_data[:,1,:].pow(2)).mean()
-
-    # 计算噪声功率
-    EbN0_linear = 10 ** (EbN0_db / 10)
-    N0 = signal_power / EbN0_linear
-    noise_std = torch.sqrt(N0/2)
-
-    # 生成 I/Q 两路独立高斯噪声
-    noise_I = noise_std * torch.randn_like(clean_data[:,0,:])
-    noise_Q = noise_std * torch.randn_like(clean_data[:,1,:])
-
-    # 加噪
-    noisy_data = clean_data.clone()
-    noisy_data[:,0,:] += noise_I
-    noisy_data[:,1,:] += noise_Q
-
+    noisy_data[:,0,:] = clean_data[:,0,:] + noise_I
+    noisy_data[:,1,:] = clean_data[:,1,:] + noise_Q
     return noisy_data
 
 
-
-def test_ddrm_snr(model, ddrm, dataloader, snr_list=[5, 10, 20, 30], device='cuda', save_dir='ddrm/ddrm_awgn/test_results'):
+def visualize_ddrm_restoration(model, ddrm, tx_clean, rx_faded, h_np, snr_list, sps=16, 
+                               guidance_scale=1.0, # 新增：CFG 强度控制
+                               device='cuda', save_dir='ddrm/ddrm_nakagmi/vis_results'):
+    """
+    可视化 DDRM 在 nakagmi 信道下的恢复效果（适配 CFG）
+    """
     os.makedirs(save_dir, exist_ok=True)
     model.eval()
-    ddrm.model.eval()
+    
+    # 取 batch 中的第一个样本进行画图
+    idx_to_plot = 0
+    x_sample_clean = tx_clean[idx_to_plot:idx_to_plot+1] # [1, 2, L] 原始
+    y_sample_faded = rx_faded[idx_to_plot:idx_to_plot+1] # [1, 2, L] 衰落后
+    h_sample = h_np[idx_to_plot:idx_to_plot+1]           # [1, 2]
 
-    # 选取一批样本
-    x_sample = next(iter(dataloader))
-    x_sample = x_sample[:8].to(device)  # 取前8个信号样本
+    # 转为 Tensor
+    h_tensor = torch.from_numpy(h_sample).float().to(device)
+    
+    # 构造标题用的信道字符串
+    h_val_str = f"{h_sample[0,0]:.2f} + {h_sample[0,1]:.2f}j"
+    h_abs = np.sqrt(h_sample[0,0]**2 + h_sample[0,1]**2)
 
     for snr_db in snr_list:
-        # 添加高斯噪声
-        x_noisy = add_awgn_noise_torch(x_sample, snr_db - 10*math.log(16,10))
-        x_denoised = ddrm.denoise(x_noisy)
+        # 1. 准备噪声和参数
+        snr_db_sample = snr_db - 10 * math.log10(sps)
+        
+        # 加噪 (基于衰落信号加噪)
+        y_sample_noisy = add_awgn_noise_np(y_sample_faded, snr_db_sample)
+        y_tensor_noisy = torch.from_numpy(y_sample_noisy).float().to(device)
 
-        # 创建一个 2x3 的子图布局
+        # 计算 Sigma_y
+        signal_power = np.mean(y_sample_faded[:, 0, :] ** 2 + y_sample_faded[:, 1, :] ** 2)
+        ebn0_linear = 10 ** (snr_db_sample / 10.0)
+        n0 = signal_power / ebn0_linear
+        sigma_y = math.sqrt(n0 / 2.0)*10
+        
+        # 2. DDRM 恢复 (带 CFG)
+        with torch.no_grad():
+            x_rec = ddrm.restore(
+                y=y_tensor_noisy,
+                h=h_tensor,
+                sigma_y=sigma_y,
+                sigma_p=1.0,
+                eta=0.0,
+                init_from='y',
+                guidance_scale=guidance_scale # 关键：传入 CFG 参数
+            )
+        '''
+        with torch.no_grad():
+            # 方法 A: 如果你把函数加到了 DDRM 类里
+            x_rec = ddrm.sample_pure_conditional(
+                y=y_tensor_noisy,
+                h=h_tensor,
+                guidance_scale=guidance_scale
+            )
+        '''
+        x_rec_np = x_rec.cpu().numpy()
+        
+        # 3. 绘图
         fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+        
+        # --- I 路 (第一行) ---
+        # Col 1: 参考
+        axs[0, 0].plot(x_sample_clean[0, 0, :], label='原始信号(干净)', color='gray', linewidth=2, alpha=0.5)
+        axs[0, 0].plot(y_sample_faded[0, 0, :], label='衰落信号(无噪)', color='purple', linestyle='--', linewidth=1.5)
+        axs[0, 0].set_title(f"参考：信道影响对比 (|h|={h_abs:.2f})", fontsize=12)
+        axs[0, 0].set_ylabel('幅度 (I路)', fontsize=10)
+        axs[0, 0].legend(loc='upper right', fontsize=9)
+        axs[0, 0].grid(True, linestyle=':', alpha=0.6)
+        
+        # Col 2: 输入
+        axs[0, 1].plot(y_sample_noisy[0, 0, :], label='含噪输入', color='red', alpha=0.7)
+        axs[0, 1].set_title(f"输入：衰落 + 加噪", fontsize=12)
+        axs[0, 1].legend(loc='upper right', fontsize=9)
+        axs[0, 1].grid(True, linestyle=':', alpha=0.6)
 
-        # 绘制原始信号的幅度图 (I 路)
-        axs[0, 0].plot(x_sample[0][0].cpu().numpy(), label='Original I Channel', color='blue')
-        axs[0, 0].set_title(f"Original Signal - I Channel - SNR {snr_db} dB")
-        axs[0, 0].set_xlabel('Sample Index')
-        axs[0, 0].set_ylabel('Magnitude')
-        axs[0, 0].legend()
+        # Col 3: 输出
+        axs[0, 2].plot(x_sample_clean[0, 0, :], label='原始真值', color='gray', alpha=0.4, linestyle='-')
+        axs[0, 2].plot(x_rec_np[0, 0, :], label='DDRM 恢复', color='green', linewidth=1.5)
+        axs[0, 2].set_title(f"输出：DDRM 恢复结果 (CFG w={guidance_scale})", fontsize=12)
+        axs[0, 2].legend(loc='upper right', fontsize=9)
+        axs[0, 2].grid(True, linestyle=':', alpha=0.6)
 
-        # 绘制原始信号的幅度图 (Q 路)
-        axs[0, 1].plot(x_sample[0][1].cpu().numpy(), label='Original Q Channel', color='purple')
-        axs[0, 1].set_title(f"Original Signal - Q Channel - SNR {snr_db} dB")
-        axs[0, 1].set_xlabel('Sample Index')
-        axs[0, 1].set_ylabel('Magnitude')
-        axs[0, 1].legend()
+        # --- Q 路 (第二行) ---
+        # Col 1: 参考
+        axs[1, 0].plot(x_sample_clean[0, 1, :], label='原始信号(干净)', color='gray', linewidth=2, alpha=0.5)
+        axs[1, 0].plot(y_sample_faded[0, 1, :], label='衰落信号(无噪)', color='purple', linestyle='--', linewidth=1.5)
+        axs[1, 0].set_title(f"参考：信道影响对比 (Q路)", fontsize=12)
+        axs[1, 0].set_ylabel('幅度 (Q路)', fontsize=10)
+        axs[1, 0].set_xlabel('采样点索引', fontsize=10)
+        axs[1, 0].legend(loc='upper right', fontsize=9)
+        axs[1, 0].grid(True, linestyle=':', alpha=0.6)
 
-        # 绘制带噪信号的幅度图 (I 路)
-        axs[0, 2].plot(x_noisy[0][0].cpu().numpy(), label='Noisy I Channel', color='red')
-        axs[0, 2].set_title(f"Noisy Signal - I Channel - SNR {snr_db} dB")
-        axs[0, 2].set_xlabel('Sample Index')
-        axs[0, 2].set_ylabel('Magnitude')
-        axs[0, 2].legend()
+        # Col 2: 输入
+        axs[1, 1].plot(y_sample_noisy[0, 1, :], label='含噪输入', color='blue', alpha=0.7)
+        axs[1, 1].set_title(f"输入：衰落 + 加噪", fontsize=12)
+        axs[1, 1].set_xlabel('采样点索引', fontsize=10)
+        axs[1, 1].legend(loc='upper right', fontsize=9)
+        axs[1, 1].grid(True, linestyle=':', alpha=0.6)
 
-        # 绘制带噪信号的幅度图 (Q 路)
-        axs[1, 0].plot(x_noisy[0][1].cpu().numpy(), label='Noisy Q Channel', color='blue')
-        axs[1, 0].set_title(f"Noisy Signal - Q Channel - SNR {snr_db} dB")
-        axs[1, 0].set_xlabel('Sample Index')
-        axs[1, 0].set_ylabel('Magnitude')
-        axs[1, 0].legend()
+        # Col 3: 输出
+        axs[1, 2].plot(x_sample_clean[0, 1, :], label='原始真值', color='gray', alpha=0.4, linestyle='-')
+        axs[1, 2].plot(x_rec_np[0, 1, :], label='DDRM 恢复', color='orange', linewidth=1.5)
+        axs[1, 2].set_title(f"输出：DDRM 恢复结果 (CFG w={guidance_scale})", fontsize=12)
+        axs[1, 2].set_xlabel('采样点索引', fontsize=10)
+        axs[1, 2].legend(loc='upper right', fontsize=9)
+        axs[1, 2].grid(True, linestyle=':', alpha=0.6)
 
-        # 绘制去噪信号的幅度图 (I 路)
-        axs[1, 1].plot(x_denoised[0][0].cpu().numpy(), label='Denoised I Channel', color='green')
-        axs[1, 1].set_title(f"Denoised Signal - I Channel - SNR {snr_db} dB")
-        axs[1, 1].set_xlabel('Sample Index')
-        axs[1, 1].set_ylabel('Magnitude')
-        axs[1, 1].legend()
-
-        # 绘制去噪信号的幅度图 (Q 路)
-        axs[1, 2].plot(x_denoised[0][1].cpu().numpy(), label='Denoised Q Channel', color='orange')
-        axs[1, 2].set_title(f"Denoised Signal - Q Channel - SNR {snr_db} dB")
-        axs[1, 2].set_xlabel('Sample Index')
-        axs[1, 2].set_ylabel('Magnitude')
-        axs[1, 2].legend()
-
-        # 调整布局，防止图像重叠
+        plt.suptitle(f"DDRM 信号恢复可视 (瑞利衰落 + AWGN) @ 符号SNR {snr_db} dB\n信道 h = {h_val_str}, CFG Scale = {guidance_scale}", fontsize=16)
         plt.tight_layout()
+        
+        # 文件名包含 guidance scale，方便对比
+        save_name = os.path.join(save_dir, f"vis_snr{snr_db}_cfg{guidance_scale}.png")
+        plt.savefig(save_name)
+        plt.close()
+        print(f"可视化结果已保存至: {save_name}")
 
-        # 保存图像
-        plt.savefig(os.path.join(save_dir, f"signal_comparison_snr{snr_db}.png"))
-        plt.close()  # 关闭当前图像
-
-        print(f"SNR={snr_db} dB 完成去噪，并保存结果。")
 
 if __name__ == "__main__":
+    # ----- 全局配置 -----
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_steps = 100         # 需与训练时的 n_steps 一致
+    sps = 16              
+    
+    # 路径配置
+    ckpt_path = fr'ddrm/ddrm_nakagmi/results/best_model_epoch_with_n_steps{n_steps}.pth'
+    vis_save_dir = 'ddrm/ddrm_nakagmi/vis_results'
 
-    # ======== 配置模型 ========
-    n_steps = 50  # 扩散步数
-    net_cfg = {'type': 'UNet', 'channels': [10, 20, 40, 80], 'pe_dim': 128}
+    # ----- 1. 加载模型 (关键修改：适配新的训练配置) -----
+    net_cfg = {
+        'type': 'UNet',
+        'channels': [32, 64, 128, 256], # 与训练时一致 (变宽了)
+        'pe_dim': 128,
+        'in_channels': 6,               # 2(x) + 2(y) + 2(h)
+        'out_channels': 2
+    }
     model = build_network(net_cfg, n_steps).to(device)
 
-    # 加载训练好的模型权重
-    model.load_state_dict(torch.load(r'ddrm/ddrm_awgn/results/best_model_epoch_with_n_steps50.pth', map_location=device))
+    if os.path.exists(ckpt_path):
+        print(f"加载模型权重: {ckpt_path}")
+        model.load_state_dict(torch.load(ckpt_path, map_location=device))
+    else:
+        print(f"⚠️ 警告：找不到权重文件 {ckpt_path}，将使用随机初始化模型。")
 
-    # DDRM 对象
-    ddrm = DDRM(model, n_steps=n_steps, min_beta=1e-4, max_beta=0.02, device=device)
+    ddrm = DDRM(model, n_steps=n_steps,
+                min_beta=1e-4, max_beta=0.02, device=device)
 
-    # 数据加载
-    dataloader = get_test_QPSKdataloader(start = 100000, end = 120000, batch_size=16)
+    # ----- 2. 加载数据 -----
+    print("正在加载数据...")
+    test_data = QPSKDataset(400000, 400100) # 取 100 个样本
+    
+    tx_clean = test_data.x   # [N, 2, L] 原始干净信号
+    rx_faded = test_data.y   # [N, 2, L] 衰落信号
+    h_np = test_data.z       # [N, 2]    信道系数
 
-    # 测试不同 SNR
-    snr_list = np.arange(-2, 15, 5)  # 单位 dB
-    test_ddrm_snr(model, ddrm, dataloader, snr_list=snr_list, device=device)
+    # ----- 3. 运行可视化 (尝试不同的 CFG Scale) -----
+    snr_list = [5, 10, 20] 
+    
+    # 尝试不同的 Guidance Scale:
+    # 0.0 = 无条件生成 (仅靠先验)
+    # 1.0 = 标准条件生成
+    # >1.0 = 强化条件 (可能增加噪声)
+    # <1.0 = 弱化条件 (可能更平滑)
+    cfg_scales = [0.3, 0.4, 0.5]
+
+    for scale in cfg_scales:
+        print(f"\n--- Running visualization with CFG Scale = {scale} ---")
+        visualize_ddrm_restoration(
+            model=model,
+            ddrm=ddrm,
+            tx_clean=tx_clean,
+            rx_faded=rx_faded,
+            h_np=h_np,
+            snr_list=snr_list,
+            sps=sps,
+            guidance_scale=scale, # 传入 scale
+            device=device,
+            save_dir=vis_save_dir
+        )
+    
+    print("所有绘图任务已完成。")
