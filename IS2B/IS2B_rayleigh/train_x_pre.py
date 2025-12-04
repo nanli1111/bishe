@@ -129,7 +129,7 @@ def train_IS2B_x0_pred(model, IS2B, train_loader, val_loader,
                 coef2 = extract(IS2B.sqrt_one_minus_alphas_cumprod, t, faded_y.shape)
                 x_t = coef1 * faded_y + coef2 * noise
                 
-                # 验证时不 drop 条件
+                # 验证时不 drop 条件 
                 net_input = torch.cat([x_t, h_expanded], dim=1)
                 
                 # 预测 x0

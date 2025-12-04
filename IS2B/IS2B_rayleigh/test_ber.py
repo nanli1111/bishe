@@ -8,9 +8,9 @@ from matplotlib import rcParams
 import csv
 
 from model.unet import build_network
-from IS2B_core import IS2B
+from IS2B_x_pre import IS2B
 from dataset.dataset import QPSKDataset
-from test_fig import add_awgn_noise_np
+from test_fig_x_pre import add_awgn_noise_np
 
 # 中文字体
 rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei']
@@ -36,13 +36,38 @@ def calculate_ber(labels_true, labels_pred):
     print(f"BER: {ber:.6e}")
     return ber
 
+def find_matching_timestep(schedule_class, snr_db, sps=16):
+    """
+    根据物理 SNR 寻找对应的扩散时间步 t (复用 test_fig 中的逻辑)
+    """
+    snr_db_sample = snr_db - 10 * math.log10(sps)
+    target_snr = 10 ** (snr_db_sample / 10.0)
+    
+    if hasattr(schedule_class, 'alpha_bars'):
+        alpha_bars = schedule_class.alpha_bars.cpu().numpy()
+    else:
+        raise AttributeError("Schedule class missing alpha_bars")
+    
+    # SNR = alpha / (1 - alpha)
+    diff_snrs = alpha_bars / (1 - alpha_bars + 1e-8)
+    diff = np.abs(diff_snrs - target_snr)
+    best_t = np.argmin(diff)
+    
+    return int(best_t), alpha_bars[best_t]
 
-# ===== 处理逻辑 =====
-def IS2B_restore_symbol(snr_db_sample, IS2B, rx_clean, h_np, batch_size=256, guidance_scale=1.0):
-    device = IS2B.device
+
+# ===== 核心恢复逻辑 =====
+def IS2B_restore_symbol_refinement(snr_db_symbol, is2b_instance, rx_clean, h_np, batch_size=256, sps=16):
+    """
+    执行 IS2B 单步精修恢复 (One-shot Refinement)
+    逻辑与 test_fig.py 完全一致
+    """
+    device = is2b_instance.device
+    model = is2b_instance.model
     n, c, L = rx_clean.shape
 
-    # 1. 加噪
+    # 1. 准备含噪接收信号 y (物理世界中的观测值)
+    snr_db_sample = snr_db_symbol - 10 * math.log10(sps)
     rx_noisy = add_awgn_noise_np(rx_clean, snr_db_sample)
 
     # 2. 转 Tensor
@@ -56,31 +81,50 @@ def IS2B_restore_symbol(snr_db_sample, IS2B, rx_clean, h_np, batch_size=256, gui
         h_expanded = h_np
     h_all = torch.from_numpy(h_expanded).float().to(device)
 
-    recovered = []
+    # 3. === 关键：寻找对应的时间步 t ===
+    # 我们假设这个含噪信号就是训练过程中某个时刻 t 的状态
+    t_idx, current_alpha_bar = find_matching_timestep(is2b_instance, snr_db_symbol, sps)
     
-    # 确保模型处于 eval 模式
-    IS2B.model.eval()
+    # 4. === 关键：幅度缩放 ===
+    # 扩散公式: x_t = sqrt(alpha_bar) * x0 + ...
+    # 物理信号: y = x0 + noise
+    # 为了让网络认为这是 x_t，我们需要把 y 乘以 sqrt(alpha_bar)
+    scale_factor = math.sqrt(current_alpha_bar)
+    
+    # 准备 x_t 输入 (全量数据缩放)
+    x_t_all = y_all * scale_factor
 
-    # 3. 批量恢复
+    print(f"SNR={snr_db_symbol}dB -> Matched Step t={t_idx}/{is2b_instance.n_steps}, Scale={scale_factor:.3f}")
+
+    recovered = []
+    model.eval()
+
+    # 5. 批量恢复
     with torch.no_grad():
-        for start in tqdm(range(0, n, batch_size),
-                          desc=f"SNR(sample)={snr_db_sample:.2f} dB"):
+        for start in tqdm(range(0, n, batch_size), desc="Inferring"):
             end = min(start + batch_size, n)
             
-            y_batch = y_all[start:end]
+            # 取出当前批次
+            x_t_batch = x_t_all[start:end]
             h_batch = h_all[start:end]
             
-            # === 调用 IS2B 类中的方法 ===
-            x_rec = IS2B.sample_pure_conditional(
-                y=y_batch,
-                h=h_batch,
-                guidance_scale=guidance_scale
-            )
+            # 构造时间 tensor
+            t_tensor = torch.full((x_t_batch.shape[0],), t_idx, device=device, dtype=torch.long)
+            
+            # 构造网络输入 [x_t, h]
+            net_input = torch.cat([x_t_batch, h_batch], dim=1)
+            
+            # 单步预测 x0
+            x_rec = model(net_input, t_tensor)
+            
+            # 截断 (Clamping)
+            x_rec = torch.clamp(x_rec, -2.0, 2.0)
+            
             recovered.append(x_rec.cpu().numpy())
 
     recovered = np.concatenate(recovered, axis=0)
     
-    # 4. 中点采样
+    # 6. 中点采样
     mid = L // 2
     sym_i = recovered[:, 0, mid]
     sym_q = recovered[:, 1, mid]
@@ -89,14 +133,14 @@ def IS2B_restore_symbol(snr_db_sample, IS2B, rx_clean, h_np, batch_size=256, gui
     return symbols
 
 
-def run_IS2B_chain(labels_iq, snr_db_sample, IS2B, rx_clean, h_np, batch_size=256, guidance_scale=1.0):
-    symbols = IS2B_restore_symbol(
-        snr_db_sample=snr_db_sample,
-        IS2B=IS2B,
+def run_IS2B_chain(labels_iq, snr_db_symbol, is2b_instance, rx_clean, h_np, batch_size=256, sps=16):
+    symbols = IS2B_restore_symbol_refinement(
+        snr_db_symbol=snr_db_symbol,
+        is2b_instance=is2b_instance,
         rx_clean=rx_clean,
         h_np=h_np,
         batch_size=batch_size,
-        guidance_scale=guidance_scale
+        sps=sps
     )
     labels_pred = decision_making(symbols)
     return calculate_ber(labels_iq, labels_pred)
@@ -106,7 +150,7 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
     plt.figure(figsize=(10, 6))
     snr_array = np.array(snr_range)
     
-    plt.semilogy(snr_array, model_bers, 'o-', label='IS2B 恢复')
+    plt.semilogy(snr_array, model_bers, 'o-', label='IS2B (Refinement)')
     
     if len(ref_bers) > 0:
         if len(ref_bers) == len(model_bers):
@@ -118,7 +162,7 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
     plt.grid(True, which='both', linestyle='--', alpha=0.7)
     plt.xlabel('SNR per symbol (dB)')
     plt.ylabel('BER')
-    plt.title('QPSK 在 nakagmi+AWGN 下：IS2B 性能')
+    plt.title('QPSK 在 Rayleigh+AWGN 下：IS2B (Refinement) 性能')
     plt.legend()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
@@ -128,25 +172,22 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
 if __name__ == "__main__":
     # ----- 配置 -----
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_steps = 100         # 必须与训练一致
+    n_steps = 150
     batch_size = 4096
     sps = 16
     
-    # 关键参数：Guidance Scale (w)
-    # w=0.5 推荐用于获得光滑波形
-    guidance_scale = 0.5 
-
     # 路径
-    ckpt_path = fr'IS2B/IS2B_nakagmi/results/best_model_epoch_with_n_steps{n_steps}.pth'
-    baseline_csv_path = 'CDDM/cddm_nakagmi/ber_result/baseline_ber.csv'
-    result_save_path = f'IS2B/IS2B_nakagmi/ber_result/ber_curve_nsteps{n_steps}_cfg{guidance_scale}.png'
+    ckpt_path = fr'IS2B/IS2B_rayleigh/results/best_model_epoch_with_n_step{n_steps}_x0.pth'
+    baseline_csv_path = 'IS2B/IS2B_rayleigh/ber_result/baseline_ber.csv'
+    result_save_path = f'IS2B/IS2B_rayleigh/ber_result/ber_curve_nsteps{n_steps}_refinement.png'
 
-    # ----- 1. 加载模型 (适配训练配置) -----
+    # ----- 1. 加载模型 -----
+    # 训练时输入是 [x_t, h]，共4通道
     net_cfg = {
         'type': 'UNet',
         'channels': [32, 64, 128, 256], 
         'pe_dim': 128,
-        'in_channels': 6,               # 6通道输入
+        'in_channels': 4,               
         'out_channels': 2
     }
     model = build_network(net_cfg, n_steps).to(device)
@@ -157,16 +198,17 @@ if __name__ == "__main__":
     else:
         print(f"⚠️ 警告: 未找到权重文件 {ckpt_path}")
 
-    IS2B = IS2B(model, n_steps=n_steps, min_beta=1e-4, max_beta=0.02, device=device)
+    # 初始化 IS2B 实例
+    is2b_instance = IS2B(model, n_steps=n_steps, min_beta=1e-4, max_beta=0.02, device=device)
 
     # ----- 2. 数据 -----
     data = QPSKDataset(400000, 500000)
-    rx_clean = data.y   # [N,2,L] 仅瑞利衰落
+    rx_clean = data.y   # [N,2,L]
     h_np = data.z       # [N,2]
     n_win = rx_clean.shape[0]
 
     # ----- 3. 标签 -----
-    label_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
+    label_path = r'F:\LJN\bishe\bishe\data\rayleigh_data\labels.npy'
     label_all = np.load(label_path)
     label_seg = label_all[400000:400000 + n_win]
     map_label = {0: (0, 0), 1: (0, 1), 2: (1, 1), 3: (1, 0)}
@@ -176,19 +218,16 @@ if __name__ == "__main__":
     snr_range = np.arange(2, 18, 1)
     model_bers = []
 
-    print(f"开始测试 (CFG Scale = {guidance_scale})...")
+    print(f"开始测试 (Refinement Mode)...")
     for snr_db in snr_range:
-        print(f"\n=== SNR (Symbol): {snr_db} dB ===")
-        snr_db_sample = snr_db - 10 * math.log10(sps)
-
         ber = run_IS2B_chain(
             labels_iq=labels_iq,
-            snr_db_sample=snr_db_sample,
-            IS2B=IS2B,
+            snr_db_symbol=snr_db,
+            is2b_instance=is2b_instance,
             rx_clean=rx_clean,
             h_np=h_np,
             batch_size=batch_size,
-            guidance_scale=guidance_scale
+            sps=sps
         )
         model_bers.append(ber)
 

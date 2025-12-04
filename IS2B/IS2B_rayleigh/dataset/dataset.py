@@ -7,13 +7,18 @@ from torch.utils.data import Dataset, DataLoader, random_split
 class QPSKDataset(Dataset):
     def __init__(self, start_samples, end_samples, seq_len=48, n_channels=2, n_classes=4):
         # 假设数据存储在文件中，读取数据
-        self.x = np.load(r'F:\LJN\bishe\bishe\data\rayleigh_data_all_h\clean_waveforms.npy')
-        self.y= np.load(r'F:\LJN\bishe\bishe\data\rayleigh_data_all_h\impaired_waveforms.npy')
-        self.z = np.load(r'F:\LJN\bishe\bishe\data\rayleigh_data_all_h\true_h.npy')
+        self.x = np.load(r'F:\LJN\bishe\bishe\data\rayleigh_data\clean_waveforms.npy')
+        self.y= np.load(r'F:\LJN\bishe\bishe\data\rayleigh_data\impaired_waveforms.npy')
+        self.z = np.load(r'F:\LJN\bishe\bishe\data\rayleigh_data\true_h.npy')
+        seq_len = self.x.shape[2]
+        self.z = self.z[:, :, np.newaxis]         # (N,2,1)
+        # 将最后一维从 1 repeat 到 48
+        self.z = np.repeat(self.z, seq_len, axis=-1)  # (N, 2, 48）
         self.x = self.x[start_samples:end_samples]  # 切割指定的样本范围
         self.y = self.y[start_samples:end_samples]  # 切割指定的样本范围
         self.z = self.z[start_samples:end_samples]  # 切割指定的样本范围
 
+        
     def __len__(self):
         return len(self.x)
 
