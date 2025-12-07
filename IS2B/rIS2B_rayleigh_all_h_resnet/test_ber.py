@@ -9,7 +9,7 @@ import csv
 
 # === 引入项目模块 ===
 # 1. 导入新的 ResNet 模型
-from model.resnet_1d import TimeResNet1D
+from model.resnet import TimeResNet1D
 # 2. 导入 IS2B 包装器
 from IS2B_x_pre import IS2B
 # 3. 数据集与工具
@@ -98,7 +98,7 @@ def IS2B_restore_symbol_rectified_flow(snr_db_sample, is2b_instance, rx_clean, h
             x_rec = is2b_instance.sample_rectified_flow(
                 y=y_batch,
                 h=h_batch,
-                guidance_scale=guidance_scale
+                guidance_scale=guidance_scale,
             )
             recovered.append(x_rec.cpu().numpy())
 
@@ -143,7 +143,7 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
     plt.ylabel('BER')
     plt.title('QPSK Performance: IS2B with TimeResNet1D')
     plt.legend()
-    plt.ylim(1e-6, 1.0)
+    plt.ylim(5e-4, 1.0)
     
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
@@ -156,22 +156,22 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
 if __name__ == "__main__":
     # ----- 配置 -----
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_steps = 50   # 必须与训练时的设置一致
-    batch_size = 2048 # 测试时可以大一点
+    n_steps = 10   # 必须与训练时的设置一致
+    batch_size = 4096 # 测试时可以大一点
     sps = 16 
     
-    guidance_scale = 1.0 # 如果没用 CFG 训练，保持 1.0
+    guidance_scale = 1 # 如果没用 CFG 训练，保持 1.0
 
     # === 路径配置 ===
     # 模型权重路径 (指向 train_resnet.py 生成的 best_model)
-    ckpt_path = fr'IS2B/resnet_is2b/results/best_model_IS2B_resnet.pth'
+    ckpt_path = fr'IS2B/rIS2B_rayleigh_all_h_resnet/results/best_model_IS2B_resnet.pth'
     
     # 结果保存路径
-    result_save_path = f'IS2B/resnet_is2b/test_results/ber_curve_resnet.png'
-    result_csv_path = f'IS2B/resnet_is2b/test_results/ber_data_resnet.csv'
+    result_save_path = f'IS2B/rIS2B_rayleigh_all_h_resnet/ber_results/ber_curve_resnet.png'
+    result_csv_path = f'IS2B/rIS2B_rayleigh_all_h_resnet/ber_results/ber_data_resnet.csv'
     
     # 基准 BER 文件
-    baseline_csv_path = 'IS2B/rIS2B_rayleigh_all_h/ber_result/baseline_ber.csv'
+    baseline_csv_path = 'IS2B/rIS2B_rayleigh_all_h_resnet/ber_results/baseline_ber.csv'
 
     # ----- 1. 加载 TimeResNet1D 模型 -----
     print(f"Building TimeResNet1D on {device}...")
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     # ----- 2. 加载测试数据 -----
     print("正在加载数据...")
     # 测试集范围：400000 ~ 500000
-    test_start, test_end = 400000, 500000
+    test_start, test_end = 400000, 420000
     test_data = QPSKDataset(test_start, test_end)
     
     rx_clean = test_data.y   # [N,2,L]

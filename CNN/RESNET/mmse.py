@@ -162,8 +162,8 @@ def run_simulation(y_clean, y_faded, h_est, true_bits, snr_db, rrc_filter, vis_i
 if __name__ == "__main__":
     # 配置
     start, end = 400000, 500000
-    label_path = r'F:\LJN\bishe\bishe\data\rayleigh_data_all_h\labels.npy'
-    save_dir = 'IS2B/rIS2B_rayleigh_all_h/ber_result'
+    label_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
+    save_dir = 'CNN/RESNET/ber_results'
     vis_dir = os.path.join(save_dir, 'vis_baseline')
     
     print("Loading data...")
@@ -211,7 +211,7 @@ if __name__ == "__main__":
     plt.grid(True, which='both', linestyle='--', alpha=0.6)
     plt.xlabel('SNR (dB)')
     plt.ylabel('BER')
-    plt.title('Baseline Performance (Rayleigh)')
+    plt.title('Baseline Performance (nakagmi)')
     plt.legend()
     plt.savefig(os.path.join(save_dir, 'baseline.png'))
     print(f"Done. Results saved to {save_dir}")

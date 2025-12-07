@@ -9,7 +9,7 @@ import csv
 
 # === 引入项目模块 ===
 # 1. 导入新的 ResNet 模型
-from model.resnet_1d import TimeResNet1D
+from model.resnet import TimeResNet1D
 # 2. 数据集与工具
 from dataset.dataset import QPSKDataset
 from test_fig_x_pre import add_awgn_noise_torch
@@ -69,7 +69,7 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
     plt.ylabel('BER')
     plt.title('IS2B One-Step Prediction Performance (ResNet)')
     plt.legend()
-    plt.ylim(1e-6, 1.0) 
+    plt.ylim(5e-4, 1.0) 
     
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
@@ -143,20 +143,20 @@ def predict_one_step_resnet(model, rx_clean, h_np, snr_db_sample, n_steps, devic
 if __name__ == "__main__":
     # ----- 配置 -----
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_steps = 50   # 必须与训练时一致
+    n_steps = 10   # 必须与训练时一致
     batch_size = 4096
     sps = 16 
     
     # === 路径配置 ===
     # 指向 TimeResNet 训练出的最佳模型
-    ckpt_path = fr'IS2B/resnet_is2b/results/best_model_IS2B_resnet.pth'
+    ckpt_path = fr'IS2B/rIS2B_rayleigh_all_h_resnet/results/best_model_IS2B_resnet.pth'
     
     # 结果保存
-    result_img_path = f'IS2B/resnet_is2b/test_results/ber_curve_onestep_resnet.png'
-    result_csv_path = f'IS2B/resnet_is2b/test_results/ber_data_onestep_resnet.csv'
+    result_img_path = f'IS2B/rIS2B_rayleigh_all_h_resnet/ber_results/ber_curve_onestep_resnet.png'
+    result_csv_path = f'IS2B/rIS2B_rayleigh_all_h_resnet/ber_results/ber_data_onestep_resnet.csv'
     
     # 基准 BER 文件 (可选)
-    baseline_csv_path = 'IS2B/rIS2B_rayleigh_all_h/ber_result/baseline_ber.csv'
+    baseline_csv_path = 'IS2B/rIS2B_rayleigh_all_h_resnet/ber_results/baseline_ber.csv'
 
     # ----- 1. 加载 TimeResNet1D 模型 -----
     print(f"Building TimeResNet1D on {device}...")

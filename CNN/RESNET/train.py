@@ -217,7 +217,7 @@ if __name__ == "__main__":
     print(f"Building SimpleResNet1D on {device}...")
     model = SimpleResNet1D(in_channels=4, out_channels=2, hidden_dim=64, num_blocks=6).to(device)
     
-    # 3. 开始训练
+    # 3. 开始训练           
     train_supervised_resnet(
         model, 
         train_loader, 

@@ -181,7 +181,6 @@ def save_and_plot(snr_range, ber_list, ref_bers, save_dir):
     plt.ylabel('BER')
     plt.title('BER Performance Comparison')
     plt.legend()
-    plt.ylim(1e-6, 1.0) # 限制Y轴防止显示异常
     plt.savefig(png_path)
     print(f"对比曲线图已保存至: {png_path}")
 
@@ -197,9 +196,9 @@ if __name__ == "__main__":
     # 模型权重路径
     model_path = r'CNN/RESNET/results/best_model_resnet.pth' 
     # 结果保存目录
-    save_dir = r'CNN/RESNET/results'
+    save_dir = r'CNN/RESNET/ber_results'
     # 标签文件
-    label_file_path = r'F:\LJN\bishe\bishe\data\rayleigh_data_all_h\labels.npy'
+    label_file_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
     # 基准文件路径 (Baseline)
     baseline_csv_path = r'CNN/RESNET/ber_results/baseline_ber.csv'
 
