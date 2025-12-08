@@ -9,7 +9,7 @@ import csv
 
 # === 引入项目模块 ===
 # 1. 导入新的 ResNet 模型
-from model.resnet import TimeResNet1D
+from model.resnet_pro import DilatedTimeResNet1D
 # 2. 导入 IS2B 包装器
 from IS2B_x_pre import IS2B
 # 3. 数据集与工具
@@ -88,7 +88,7 @@ def IS2B_restore_symbol_hybrid(snr_db_sample, is2b_instance, rx_clean, h_np, bat
 
     # 3. 批量恢复
     with torch.no_grad():
-        for start in tqdm(range(0, n, batch_size), desc=f"SNR(sample)={snr_db_sample:.2f} dB"):
+        for start in tqdm(range(0, n, batch_size), desc=f"SNR(sample)={snr_db_sample:.2f} dB", mininterval=2.0):
             end = min(start + batch_size, n)
             
             y_batch = y_all[start:end]
@@ -183,22 +183,22 @@ if __name__ == "__main__":
     guidance_scale = 1.0 
 
     # === 路径配置 ===
-    ckpt_path = fr'IS2B/rIS2B_nakagmi_resnet_adjust/results/best_model_IS2B_resnet_{n_steps}.pth'
+    ckpt_path = fr'IS2B/rIS2B_nakagmi_resnet_adjust/results/best_model_IS2B_resnet_pro_scope_{n_steps}.pth'
     
     # 保存路径 (文件名改一下以区分)
-    result_save_path = f'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_hybrid.png'
-    result_csv_path = f'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_data_resnet_hybrid.csv'
+    result_save_path = f'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_scope.png'
+    result_csv_path = f'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_data_resnet_scope.csv'
     
     baseline_csv_path = 'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_values.csv'
 
     # ----- 1. 加载 TimeResNet1D 模型 -----
     print(f"Building TimeResNet1D on {device}...")
-    model = TimeResNet1D(
+    model = DilatedTimeResNet1D(
         in_channels=4, 
         out_channels=2, 
-        hidden_dim=128,  
-        num_blocks=8,    
-        time_emb_dim=64  
+        hidden_dim=128,   # 宽度
+        num_blocks=12,    # 深度可以加深，例如 12 层
+        time_emb_dim=128
     ).to(device)
 
     if os.path.exists(ckpt_path):

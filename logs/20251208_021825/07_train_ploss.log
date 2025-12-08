@@ -1,0 +1,16 @@
+[2025-12-08 15:48:23.468752] 开始执行: D:\anaconda\envs\ljn\python.exe F:\LJN\bishe\bishe\IS2B\rIS2B_nakagmi_resnet_adjust\train_ploss.py
+--------------------------------------------------
+Building Model (DilatedTimeResNet1D) on cuda...
+🚀 Start Training with Phase Loss & Weighted SNR...
+Loss Config: L1_weight=1.0, Phase_weight=0.2
+SNR Strategy: 70% (0-10dB), 30% (10-20dB)
+
+                                                                                      
+[Epoch 1] Train: nan (Ph: nan) | Val: nan | LR: 1.40e-04
+
+                                                                                      
+[Epoch 2] Train: nan (Ph: nan) | Val: nan | LR: 2.30e-04
+
+                                                                                      
+[Epoch 3] Train: nan (Ph: nan) | Val: nan | LR: 3.20e-04
+

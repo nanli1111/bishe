@@ -7,7 +7,7 @@ from matplotlib import rcParams
 
 # === 引入项目模块 ===
 # 1. 导入新的 ResNet 模型
-from model.resnet import TimeResNet1D
+from model.resnet_pro import DilatedTimeResNet1D
 # 2. 导入 IS2B 包装器
 from IS2B_x_pre import IS2B
 # 3. 数据集与工具
@@ -58,7 +58,6 @@ def add_awgn_noise_torch(clean_data, EbN0_db):
     noisy_data[:, 1, :] = clean_data[:, 1, :] + noise_Q
 
     return noisy_data
-
 # ==========================================
 # 2. 波形可视化 (适配 Hybrid Anchor 策略)
 # ==========================================
@@ -99,20 +98,16 @@ def visualize_comparison_overlay(model, is2b, tx_clean, rx_faded, h_np, snr_list
             net_input = torch.cat([y_tensor_noisy, h_tensor], dim=1)
             t_max = torch.full((1,), is2b.n_steps - 1, device=device, dtype=torch.long)
             x_onestep = model(net_input, t_max)
-            # 为了可视化对比，这里可以先不截断，或者也截断，看你想怎么比
-            # x_onestep = torch.clamp(x_onestep, -2.5, 2.5) 
             x_onestep_np = x_onestep.cpu().numpy()
 
             # B. Rectified Flow (Hybrid Sampling)
-            # 传入 One-Step 结果作为 Anchor
             x_rf = is2b.sample(
                 y=y_tensor_noisy, 
                 h=h_tensor, 
                 guidance_scale=1.0, 
-                stop_t=0.0,      # 建议使用截断采样
-                anchor=x_onestep # <--- 关键：传入 Anchor 进行约束
+                stop_t=0.0,      
+                anchor=x_onestep 
             )
-            # x_rf = torch.clamp(x_rf, -2.5, 2.5)
             x_rf_np = x_rf.cpu().numpy()
         
         # 绘图
@@ -150,13 +145,14 @@ def visualize_comparison_overlay(model, is2b, tx_clean, rx_faded, h_np, snr_list
         plt.close()
 
 # ==========================================
-# 3. 星座图可视化 (适配 Hybrid Anchor 策略)
+# 3. 星座图可视化 (核心修改部分)
 # ==========================================
 def visualize_constellation_comparison(model, is2b, tx_clean, rx_faded, h_np, snr_list, sps=16, 
                                        device='cuda', save_dir='IS2B/resnet_is2b/vis_constellation',
                                        num_points=2048):
     """
     可视化对比：星座图 (Constellation Diagram)
+    修改：移除 Overlay，改为绘制 Clean Reference
     """
     os.makedirs(save_dir, exist_ok=True)
     model.eval()
@@ -176,6 +172,10 @@ def visualize_constellation_comparison(model, is2b, tx_clean, rx_faded, h_np, sn
     # 中点索引
     mid = x_batch.shape[2] // 2
 
+    # 提取 Ground Truth (Clean) 数据 - 它不随 SNR 变化，提前提取
+    gt_I = x_batch[:, 0, mid]
+    gt_Q = x_batch[:, 1, mid]
+
     for snr_db in snr_list:
         print(f"  -> Processing Constellation for SNR={snr_db}dB...")
         snr_db_sample = snr_db - 10 * math.log10(sps) + 10 * math.log10(2)
@@ -194,8 +194,8 @@ def visualize_constellation_comparison(model, is2b, tx_clean, rx_faded, h_np, sn
                 y=y_tensor_noisy, 
                 h=h_tensor, 
                 guidance_scale=1.0, 
-                stop_t=0.0,      # 保持与波形可视化一致
-                anchor=x_onestep # <--- 传入 Anchor
+                stop_t=0.0,      
+                anchor=x_onestep 
             )
 
         # 4. 提取中点数据 (转 Numpy)
@@ -207,8 +207,6 @@ def visualize_constellation_comparison(model, is2b, tx_clean, rx_faded, h_np, sn
         
         rf_np = x_rf.cpu().numpy()
         rf_I = rf_np[:, 0, mid]; rf_Q = rf_np[:, 1, mid]
-        
-        gt_I = x_batch[:, 0, mid]; gt_Q = x_batch[:, 1, mid]
 
         # 5. 绘图 (1行4列)
         fig, axs = plt.subplots(1, 4, figsize=(24, 6))
@@ -226,24 +224,20 @@ def visualize_constellation_comparison(model, is2b, tx_clean, rx_faded, h_np, sn
         
         # Subplot 2: One-Step Output
         axs[1].scatter(os_I, os_Q, s=s_val, c='blue', alpha=alpha_val, label='One-Step')
-        axs[1].scatter(gt_I, gt_Q, s=s_val, c='black', alpha=0.1) 
         axs[1].set_title("One-Step Prediction")
         axs[1].set_xlim(-lim, lim); axs[1].set_ylim(-lim, lim)
         axs[1].grid(True, linestyle='--', alpha=0.5)
         
         # Subplot 3: Rectified Flow Output (Hybrid)
         axs[2].scatter(rf_I, rf_Q, s=s_val, c='green', alpha=alpha_val, label='Rectified Flow (Hybrid)')
-        axs[2].scatter(gt_I, gt_Q, s=s_val, c='black', alpha=0.1)
         axs[2].set_title("RF Output (Hybrid Anchor)")
         axs[2].set_xlim(-lim, lim); axs[2].set_ylim(-lim, lim)
         axs[2].grid(True, linestyle='--', alpha=0.5)
 
-        # Subplot 4: Overlay (One-Step vs RF)
-        axs[3].scatter(os_I, os_Q, s=s_val, c='blue', alpha=0.3, label='One-Step')
-        axs[3].scatter(rf_I, rf_Q, s=s_val, c='green', alpha=0.3, label='RF (Hybrid)')
-        axs[3].set_title("Overlay Comparison")
+        # Subplot 4: Clean Reference (Ground Truth) -- 修改部分
+        axs[3].scatter(gt_I, gt_Q, s=s_val, c='black', alpha=alpha_val, label='Clean Ref')
+        axs[3].set_title("Clean Reference (Ground Truth)")
         axs[3].set_xlim(-lim, lim); axs[3].set_ylim(-lim, lim)
-        axs[3].legend(loc='upper right')
         axs[3].grid(True, linestyle='--', alpha=0.5)
 
         plt.suptitle(f"Constellation Diagram Comparison (Hybrid) - SNR: {snr_db}dB", fontsize=16)
@@ -260,18 +254,18 @@ if __name__ == "__main__":
     sps = 16 
     
     # === 路径配置 ===
-    ckpt_path = fr'IS2B/rIS2B_nakagmi_resnet_combine/results/best_model_IS2B_resnet_{n_steps}.pth'
-    vis_wav_dir = 'IS2B/rIS2B_nakagmi_resnet_combine/vis_waveforms'
-    vis_con_dir = 'IS2B/rIS2B_nakagmi_resnet_combine/vis_constellations'
+    ckpt_path = fr'IS2B/rIS2B_nakagmi_resnet_adjust/results/best_model_IS2B_resnet_pro_scope_{n_steps}.pth'
+    vis_wav_dir = 'IS2B/rIS2B_nakagmi_resnet_adjust/vis_waveforms'
+    vis_con_dir = 'IS2B/rIS2B_nakagmi_resnet_adjust/vis_constellations'
 
     # === 1. 构建 TimeResNet1D 模型 ===
     print(f"Building TimeResNet1D on {device}...")
-    model = TimeResNet1D(
+    model = DilatedTimeResNet1D(
         in_channels=4, 
         out_channels=2, 
-        hidden_dim=128,  
-        num_blocks=8,    
-        time_emb_dim=64  
+        hidden_dim=128,   # 宽度
+        num_blocks=12,    # 深度可以加深，例如 12 层
+        time_emb_dim=128
     ).to(device)
 
     if os.path.exists(ckpt_path):
@@ -318,7 +312,7 @@ if __name__ == "__main__":
         sps=sps,
         device=device,
         save_dir=vis_con_dir,
-        num_points=2048 # 使用 2048 个点画星座图
+        num_points=2048 
     )
     
     print("所有可视化任务已完成。")

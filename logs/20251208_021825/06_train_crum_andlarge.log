@@ -1,0 +1,258 @@
+[2025-12-08 14:18:20.933958] 开始执行: D:\anaconda\envs\ljn\python.exe F:\LJN\bishe\bishe\IS2B\rIS2B_nakagmi_resnet_adjust\train_crum_andlarge.py
+--------------------------------------------------
+Building DilatedTimeResNet1D on cuda...
+Start Training IS2B with Curriculum Learning...
+Curriculum: SNR min drops from 15.0dB to 0.0dB over 30 epochs.
+[Curriculum Info] Epoch 1: Training SNR range [15.0, 22.0] dB
+
+                                                                                           
+[Epoch 1] Train Loss: 0.033428 | Val Loss: 0.041429 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 2] Train Loss: 0.021298 | Val Loss: 0.040810 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 3] Train Loss: 0.019362 | Val Loss: 0.040455 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 4] Train Loss: 0.018530 | Val Loss: 0.038396 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 5] Train Loss: 0.018031 | Val Loss: 0.036207 | LR: 2.00e-04
+--> Best Model Saved.
+[Curriculum Info] Epoch 6: Training SNR range [12.4, 22.0] dB
+
+                                                                                           
+[Epoch 6] Train Loss: 0.018172 | Val Loss: 0.035589 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 7] Train Loss: 0.018161 | Val Loss: 0.035215 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 8] Train Loss: 0.018278 | Val Loss: 0.033943 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 9] Train Loss: 0.018509 | Val Loss: 0.034025 | LR: 2.00e-04
+
+                                                                                            
+[Epoch 10] Train Loss: 0.018804 | Val Loss: 0.033579 | LR: 2.00e-04
+--> Best Model Saved.
+[Curriculum Info] Epoch 11: Training SNR range [9.8, 22.0] dB
+
+                                                                                           
+[Epoch 11] Train Loss: 0.019270 | Val Loss: 0.032639 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 12] Train Loss: 0.019588 | Val Loss: 0.032413 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 13] Train Loss: 0.020073 | Val Loss: 0.032554 | LR: 2.00e-04
+
+                                                                                           
+[Epoch 14] Train Loss: 0.020652 | Val Loss: 0.032148 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 15] Train Loss: 0.021190 | Val Loss: 0.032281 | LR: 2.00e-04
+[Curriculum Info] Epoch 16: Training SNR range [7.2, 22.0] dB
+
+                                                                                           
+[Epoch 16] Train Loss: 0.021761 | Val Loss: 0.032081 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 17] Train Loss: 0.022453 | Val Loss: 0.031631 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 18] Train Loss: 0.023082 | Val Loss: 0.031438 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 19] Train Loss: 0.023829 | Val Loss: 0.031234 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 20] Train Loss: 0.024460 | Val Loss: 0.031737 | LR: 2.00e-04
+[Curriculum Info] Epoch 21: Training SNR range [4.7, 22.0] dB
+
+                                                                                           
+[Epoch 21] Train Loss: 0.025299 | Val Loss: 0.032076 | LR: 2.00e-04
+
+                                                                                           
+[Epoch 22] Train Loss: 0.026026 | Val Loss: 0.031236 | LR: 2.00e-04
+
+                                                                                           
+[Epoch 23] Train Loss: 0.026776 | Val Loss: 0.031497 | LR: 1.60e-04
+
+                                                                                           
+[Epoch 24] Train Loss: 0.027233 | Val Loss: 0.031136 | LR: 1.60e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 25] Train Loss: 0.027899 | Val Loss: 0.031110 | LR: 1.60e-04
+--> Best Model Saved.
+[Curriculum Info] Epoch 26: Training SNR range [2.1, 22.0] dB
+
+                                                                                           
+[Epoch 26] Train Loss: 0.028879 | Val Loss: 0.030940 | LR: 1.60e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 27] Train Loss: 0.029653 | Val Loss: 0.030623 | LR: 1.60e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 28] Train Loss: 0.030642 | Val Loss: 0.030860 | LR: 1.60e-04
+
+                                                                                           
+[Epoch 29] Train Loss: 0.031560 | Val Loss: 0.031158 | LR: 1.60e-04
+
+                                                                                           
+[Epoch 30] Train Loss: 0.032528 | Val Loss: 0.031250 | LR: 1.60e-04
+[Curriculum Info] Epoch 31: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 31] Train Loss: 0.032300 | Val Loss: 0.030996 | LR: 1.28e-04
+
+                                                                                           
+[Epoch 32] Train Loss: 0.032150 | Val Loss: 0.030254 | LR: 1.28e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 33] Train Loss: 0.032069 | Val Loss: 0.030602 | LR: 1.28e-04
+
+                                                                                           
+[Epoch 34] Train Loss: 0.032047 | Val Loss: 0.030684 | LR: 1.28e-04
+
+                                                                                           
+[Epoch 35] Train Loss: 0.031902 | Val Loss: 0.030387 | LR: 1.28e-04
+[Curriculum Info] Epoch 36: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 36] Train Loss: 0.032016 | Val Loss: 0.030142 | LR: 1.28e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 37] Train Loss: 0.031967 | Val Loss: 0.030398 | LR: 1.28e-04
+
+                                                                                           
+[Epoch 38] Train Loss: 0.031880 | Val Loss: 0.030242 | LR: 1.28e-04
+
+                                                                                           
+[Epoch 39] Train Loss: 0.031966 | Val Loss: 0.030381 | LR: 1.28e-04
+
+                                                                                           
+[Epoch 40] Train Loss: 0.031970 | Val Loss: 0.030429 | LR: 1.02e-04
+[Curriculum Info] Epoch 41: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 41] Train Loss: 0.031757 | Val Loss: 0.030170 | LR: 1.02e-04
+
+                                                                                           
+[Epoch 42] Train Loss: 0.031682 | Val Loss: 0.030037 | LR: 1.02e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 43] Train Loss: 0.031548 | Val Loss: 0.029780 | LR: 1.02e-04
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 44] Train Loss: 0.031627 | Val Loss: 0.030322 | LR: 1.02e-04
+
+                                                                                           
+[Epoch 45] Train Loss: 0.031668 | Val Loss: 0.030159 | LR: 1.02e-04
+[Curriculum Info] Epoch 46: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 46] Train Loss: 0.031659 | Val Loss: 0.030528 | LR: 1.02e-04
+
+                                                                                           
+[Epoch 47] Train Loss: 0.031607 | Val Loss: 0.030234 | LR: 8.19e-05
+
+                                                                                           
+[Epoch 48] Train Loss: 0.031503 | Val Loss: 0.029716 | LR: 8.19e-05
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 49] Train Loss: 0.031558 | Val Loss: 0.029917 | LR: 8.19e-05
+
+                                                                                           
+[Epoch 50] Train Loss: 0.031344 | Val Loss: 0.030164 | LR: 8.19e-05
+[Curriculum Info] Epoch 51: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 51] Train Loss: 0.031362 | Val Loss: 0.030409 | LR: 8.19e-05
+
+                                                                                           
+[Epoch 52] Train Loss: 0.031407 | Val Loss: 0.030082 | LR: 6.55e-05
+
+                                                                                           
+[Epoch 53] Train Loss: 0.031314 | Val Loss: 0.029680 | LR: 6.55e-05
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 54] Train Loss: 0.031209 | Val Loss: 0.029902 | LR: 6.55e-05
+
+                                                                                           
+[Epoch 55] Train Loss: 0.031267 | Val Loss: 0.029772 | LR: 6.55e-05
+[Curriculum Info] Epoch 56: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 56] Train Loss: 0.031243 | Val Loss: 0.029712 | LR: 6.55e-05
+
+                                                                                           
+[Epoch 57] Train Loss: 0.031187 | Val Loss: 0.030057 | LR: 5.24e-05
+
+                                                                                           
+[Epoch 58] Train Loss: 0.031190 | Val Loss: 0.030029 | LR: 5.24e-05
+
+                                                                                           
+[Epoch 59] Train Loss: 0.031165 | Val Loss: 0.029315 | LR: 5.24e-05
+--> Best Model Saved.
+
+                                                                                           
+[Epoch 60] Train Loss: 0.031003 | Val Loss: 0.029482 | LR: 5.24e-05
+[Curriculum Info] Epoch 61: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 61] Train Loss: 0.031097 | Val Loss: 0.029836 | LR: 5.24e-05
+
+                                                                                           
+[Epoch 62] Train Loss: 0.031137 | Val Loss: 0.029621 | LR: 5.24e-05
+
+                                                                                           
+[Epoch 63] Train Loss: 0.031187 | Val Loss: 0.029482 | LR: 4.19e-05
+
+                                                                                           
+[Epoch 64] Train Loss: 0.030926 | Val Loss: 0.029439 | LR: 4.19e-05
+
+                                                                                           
+[Epoch 65] Train Loss: 0.030898 | Val Loss: 0.029485 | LR: 4.19e-05
+[Curriculum Info] Epoch 66: Training SNR range [0.0, 22.0] dB
+
+                                                                                           
+[Epoch 66] Train Loss: 0.030954 | Val Loss: 0.029398 | LR: 4.19e-05
+
+                                                                                           
+[Epoch 67] Train Loss: 0.031017 | Val Loss: 0.029426 | LR: 3.36e-05
+
+                                                                                           
+[Epoch 68] Train Loss: 0.030954 | Val Loss: 0.029531 | LR: 3.36e-05
+
+                                                                                           
+[Epoch 69] Train Loss: 0.030940 | Val Loss: 0.029682 | LR: 3.36e-05
+Early stopping triggered.
+
+--------------------------------------------------
+[2025-12-08 15:48:23.466751] 执行结束，返回码: 0
+

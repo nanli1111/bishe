@@ -32,7 +32,7 @@ def train_IS2B_resnet(model, is2b, train_loader, val_loader,
     # === 修改点 1：使用 ReduceLROnPlateau ===
     # mode='min': 当监测指标(val_loss)不再下降时触发
     # factor=0.5: 触发时学习率减半
-    # patience=3: 容忍 3 个 epoch 指标不下降，第 4 个还不降则触发衰减
+    # patience=3: 容忍 2 个 epoch 指标不下降，第 4 个还不降则触发衰减
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.8, patience=3)
     
     loss_history = []
@@ -51,7 +51,7 @@ def train_IS2B_resnet(model, is2b, train_loader, val_loader,
         model.train()
         epoch_loss = 0
         
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs}", leave=False)
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs}", leave=False, mininterval=2.0)
         
         for clean_x, faded_y, h_est in pbar:
             clean_x = clean_x.to(device).float()
@@ -68,7 +68,7 @@ def train_IS2B_resnet(model, is2b, train_loader, val_loader,
                 h_expanded = h_est
 
             # 2. 动态加噪 (Data Augmentation)
-            snr_min, snr_max = 10.0, 10.0
+            snr_min, snr_max = 0.0, 22.0
             random_symbol_snr = (torch.rand(batch_size, 1, 1, device=device) * (snr_max - snr_min) + snr_min)
             random_sample_snr = random_symbol_snr - 10 * math.log10(sps) 
             
@@ -158,7 +158,7 @@ def train_IS2B_resnet(model, is2b, train_loader, val_loader,
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             epochs_since_improvement = 0
-            torch.save(model.state_dict(), os.path.join(save_dir, f"best_model_IS2B_resnet_pro_{n_steps}.pth"))
+            torch.save(model.state_dict(), os.path.join(save_dir, f"best_model_IS2B_resnet_pro_scope_{n_steps}.pth"))
             print("--> Best Model Saved.")
         else:
             epochs_since_improvement += 1
