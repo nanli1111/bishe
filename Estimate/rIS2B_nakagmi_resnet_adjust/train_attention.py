@@ -14,7 +14,7 @@ from IS2B_x_pre import IS2B
 # 3. 数据集与加噪函数
 from dataset.dataset_5 import get_train_QPSKdataloader
 from test_fig_x_pre import add_awgn_noise_torch
-from model.resnet_pro import DilatedTimeResNet1D
+from model.resnet_attention import AttentionTimeResNet1D
 
 def train_IS2B_resnet(model, is2b, train_loader, val_loader, 
                       epochs=50, lr=2e-4, device='cuda', 
@@ -157,7 +157,7 @@ def train_IS2B_resnet(model, is2b, train_loader, val_loader,
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             epochs_since_improvement = 0
-            torch.save(model.state_dict(), os.path.join(save_dir, f"best_model_IS2B_resnet_pro_scope_{n_steps}_5.pth"))
+            torch.save(model.state_dict(), os.path.join(save_dir, f"best_model_IS2B_resnet_pro_scope_{n_steps}_attention.pth"))
             print("--> Best Model Saved.")
         else:
             epochs_since_improvement += 1
@@ -186,14 +186,14 @@ if __name__ == "__main__":
     
     # 1. 实例化 TimeResNet1D
     print(f"Building TimeResNet1D on {device}...")
-    model = DilatedTimeResNet1D(
+    model = AttentionTimeResNet1D(
         in_channels=4, 
         out_channels=2, 
-        hidden_dim=128,   # 宽度
-        num_blocks=12,    # 深度可以加深，例如 12 层
+        hidden_dim=128,   # 建议 128 或 256
+        num_blocks=12,    # 这将包含 12 个 ResBlock 和 3 个 Attention Block (每4层插1个)
         time_emb_dim=128
     ).to(device)
-    
+
     # 2. IS2B 包装器 (辅助类)
     is2b_wrapper = IS2B(model, n_steps=n_steps, device=device)
 

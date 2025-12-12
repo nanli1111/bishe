@@ -7,9 +7,9 @@ from torch.utils.data import Dataset, DataLoader, random_split
 class QPSKDataset(Dataset):
     def __init__(self, start_samples, end_samples, seq_len=48, n_channels=2, n_classes=4):
         # 假设数据存储在文件中，读取数据
-        self.x = np.load(r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data\clean_waveforms.npy')
-        self.y= np.load(r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data\impaired_waveforms.npy')
-        self.z = np.load(r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data\estimated_h.npy')
+        self.x = np.load(r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data_5\clean_waveforms.npy')
+        self.y= np.load(r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data_5\impaired_waveforms.npy')
+        self.z = np.load(r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data_5\estimated_h.npy')
         L = self.x.shape[2]
         if self.z.ndim == 2:
             self.z = self.z[:, :, np.newaxis]
@@ -62,4 +62,4 @@ def get_test_QPSKdataloader(start=0, end=100000, batch_size=64, shuffle=False):
 
 # 获取信号的形状
 def get_signal_shape():
-    return (2, 48)  # 2个通道，长度为48的信号
+    return (2, 80)  # 2个通道，长度为48的信号

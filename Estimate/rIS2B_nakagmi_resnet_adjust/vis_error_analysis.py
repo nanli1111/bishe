@@ -192,8 +192,8 @@ if __name__ == "__main__":
     sps = 16 
     
     # 路径配置
-    ckpt_path = fr'IS2B/rIS2B_rayleigh_all_h_resnet_stop/results/best_model_IS2B_resnet.pth'
-    vis_save_dir = 'IS2B/rIS2B_rayleigh_all_h_resnet_stop/vis_error_analysis'
+    ckpt_path = fr'Estimate/rIS2B_rayleigh_all_h_resnet_stop/results/best_model_IS2B_resnet.pth'
+    vis_save_dir = 'Estimate/rIS2B_rayleigh_all_h_resnet_stop/vis_error_analysis'
 
     # 1. 模型 (必须与训练一致)
     print(f"Building TimeResNet1D on {device}...")

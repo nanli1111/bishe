@@ -1,0 +1,264 @@
+[2025-12-12 03:57:11.133574] 开始执行: D:\anaconda\envs\ljn\python.exe F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\train_attention.py
+--------------------------------------------------
+Building TimeResNet1D on cuda...
+Start Training IS2B with TimeResNet1D...
+Device: cuda, Epochs: 500, Batch Size: 256
+Scheduler: ReduceLROnPlateau (Patience=3, Factor=0.8)
+
+                                                                              
+[Epoch 1] Train Loss: 0.417253 | Val Loss: 0.343702 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 2] Train Loss: 0.331034 | Val Loss: 0.317814 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 3] Train Loss: 0.314080 | Val Loss: 0.304596 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 4] Train Loss: 0.305589 | Val Loss: 0.300953 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 5] Train Loss: 0.298345 | Val Loss: 0.292673 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 6] Train Loss: 0.294092 | Val Loss: 0.288214 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 7] Train Loss: 0.291968 | Val Loss: 0.287793 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 8] Train Loss: 0.289588 | Val Loss: 0.283816 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                              
+[Epoch 9] Train Loss: 0.285740 | Val Loss: 0.284401 | LR: 2.00e-04
+
+                                                                               
+[Epoch 10] Train Loss: 0.283381 | Val Loss: 0.278043 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 11] Train Loss: 0.281902 | Val Loss: 0.278208 | LR: 2.00e-04
+
+                                                                               
+[Epoch 12] Train Loss: 0.280010 | Val Loss: 0.277703 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 13] Train Loss: 0.279418 | Val Loss: 0.275518 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 14] Train Loss: 0.277379 | Val Loss: 0.275085 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 15] Train Loss: 0.276741 | Val Loss: 0.273914 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 16] Train Loss: 0.276574 | Val Loss: 0.274228 | LR: 2.00e-04
+
+                                                                               
+[Epoch 17] Train Loss: 0.274057 | Val Loss: 0.272455 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 18] Train Loss: 0.273967 | Val Loss: 0.267078 | LR: 2.00e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 19] Train Loss: 0.271819 | Val Loss: 0.271406 | LR: 2.00e-04
+
+                                                                               
+[Epoch 20] Train Loss: 0.272381 | Val Loss: 0.269099 | LR: 2.00e-04
+
+                                                                               
+[Epoch 21] Train Loss: 0.272429 | Val Loss: 0.269880 | LR: 2.00e-04
+
+                                                                               
+[Epoch 22] Train Loss: 0.270703 | Val Loss: 0.269867 | LR: 1.60e-04
+
+                                                                               
+[Epoch 23] Train Loss: 0.268603 | Val Loss: 0.266342 | LR: 1.60e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 24] Train Loss: 0.268493 | Val Loss: 0.266428 | LR: 1.60e-04
+
+                                                                               
+[Epoch 25] Train Loss: 0.268023 | Val Loss: 0.266630 | LR: 1.60e-04
+
+                                                                               
+[Epoch 26] Train Loss: 0.267577 | Val Loss: 0.266205 | LR: 1.60e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 27] Train Loss: 0.267226 | Val Loss: 0.269126 | LR: 1.60e-04
+
+                                                                               
+[Epoch 28] Train Loss: 0.266307 | Val Loss: 0.261325 | LR: 1.60e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 29] Train Loss: 0.265756 | Val Loss: 0.264982 | LR: 1.60e-04
+
+                                                                               
+[Epoch 30] Train Loss: 0.266348 | Val Loss: 0.262806 | LR: 1.60e-04
+
+                                                                               
+[Epoch 31] Train Loss: 0.266167 | Val Loss: 0.264969 | LR: 1.60e-04
+
+                                                                               
+[Epoch 32] Train Loss: 0.266151 | Val Loss: 0.263498 | LR: 1.28e-04
+
+                                                                               
+[Epoch 33] Train Loss: 0.263608 | Val Loss: 0.258033 | LR: 1.28e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 34] Train Loss: 0.263227 | Val Loss: 0.260990 | LR: 1.28e-04
+
+                                                                               
+[Epoch 35] Train Loss: 0.262950 | Val Loss: 0.264353 | LR: 1.28e-04
+
+                                                                               
+[Epoch 36] Train Loss: 0.262486 | Val Loss: 0.262754 | LR: 1.28e-04
+
+                                                                               
+[Epoch 37] Train Loss: 0.262485 | Val Loss: 0.262807 | LR: 1.02e-04
+
+                                                                               
+[Epoch 38] Train Loss: 0.261243 | Val Loss: 0.263279 | LR: 1.02e-04
+
+                                                                               
+[Epoch 39] Train Loss: 0.261296 | Val Loss: 0.260056 | LR: 1.02e-04
+
+                                                                               
+[Epoch 40] Train Loss: 0.260718 | Val Loss: 0.257384 | LR: 1.02e-04
+--> Best Model Saved.
+
+                                                                               
+[Epoch 41] Train Loss: 0.260639 | Val Loss: 0.258082 | LR: 1.02e-04
+
+                                                                               
+[Epoch 42] Train Loss: 0.261458 | Val Loss: 0.258302 | LR: 1.02e-04
+
+                                                                               
+[Epoch 43] Train Loss: 0.260202 | Val Loss: 0.259028 | LR: 1.02e-04
+
+                                                                               
+[Epoch 44] Train Loss: 0.260326 | Val Loss: 0.258729 | LR: 8.19e-05
+
+                                                                               
+[Epoch 45] Train Loss: 0.259314 | Val Loss: 0.258480 | LR: 8.19e-05
+
+                                                                               
+[Epoch 46] Train Loss: 0.259117 | Val Loss: 0.259590 | LR: 8.19e-05
+
+                                                                               
+[Epoch 47] Train Loss: 0.258853 | Val Loss: 0.261012 | LR: 8.19e-05
+
+                                                                               
+[Epoch 48] Train Loss: 0.259789 | Val Loss: 0.257276 | LR: 8.19e-05
+--> Best Model Saved.
+
+                                                                               
+[Epoch 49] Train Loss: 0.259096 | Val Loss: 0.255986 | LR: 8.19e-05
+--> Best Model Saved.
+
+                                                                               
+[Epoch 50] Train Loss: 0.258905 | Val Loss: 0.257990 | LR: 8.19e-05
+
+                                                                               
+[Epoch 51] Train Loss: 0.259099 | Val Loss: 0.257223 | LR: 8.19e-05
+
+                                                                               
+[Epoch 52] Train Loss: 0.258658 | Val Loss: 0.255584 | LR: 8.19e-05
+--> Best Model Saved.
+
+                                                                               
+[Epoch 53] Train Loss: 0.258634 | Val Loss: 0.257270 | LR: 8.19e-05
+
+                                                                               
+[Epoch 54] Train Loss: 0.258276 | Val Loss: 0.259547 | LR: 8.19e-05
+
+                                                                               
+[Epoch 55] Train Loss: 0.257778 | Val Loss: 0.255635 | LR: 8.19e-05
+
+                                                                               
+[Epoch 56] Train Loss: 0.259204 | Val Loss: 0.258736 | LR: 6.55e-05
+
+                                                                               
+[Epoch 57] Train Loss: 0.257463 | Val Loss: 0.254413 | LR: 6.55e-05
+--> Best Model Saved.
+
+                                                                               
+[Epoch 58] Train Loss: 0.257547 | Val Loss: 0.259955 | LR: 6.55e-05
+
+                                                                               
+[Epoch 59] Train Loss: 0.256626 | Val Loss: 0.253591 | LR: 6.55e-05
+--> Best Model Saved.
+
+                                                                               
+[Epoch 60] Train Loss: 0.256883 | Val Loss: 0.256354 | LR: 6.55e-05
+
+                                                                               
+[Epoch 61] Train Loss: 0.256654 | Val Loss: 0.255316 | LR: 6.55e-05
+
+                                                                               
+[Epoch 62] Train Loss: 0.256586 | Val Loss: 0.251974 | LR: 6.55e-05
+--> Best Model Saved.
+
+                                                                               
+[Epoch 63] Train Loss: 0.257131 | Val Loss: 0.257209 | LR: 6.55e-05
+
+                                                                               
+[Epoch 64] Train Loss: 0.257655 | Val Loss: 0.257013 | LR: 6.55e-05
+
+                                                                               
+[Epoch 65] Train Loss: 0.256273 | Val Loss: 0.251353 | LR: 6.55e-05
+--> Best Model Saved.
+
+                                                                               
+[Epoch 66] Train Loss: 0.256729 | Val Loss: 0.254920 | LR: 6.55e-05
+
+                                                                               
+[Epoch 67] Train Loss: 0.256990 | Val Loss: 0.252166 | LR: 6.55e-05
+
+                                                                               
+[Epoch 68] Train Loss: 0.257039 | Val Loss: 0.255060 | LR: 6.55e-05
+
+                                                                               
+[Epoch 69] Train Loss: 0.255398 | Val Loss: 0.254508 | LR: 5.24e-05
+
+                                                                               
+[Epoch 70] Train Loss: 0.256581 | Val Loss: 0.256737 | LR: 5.24e-05
+
+                                                                               
+[Epoch 71] Train Loss: 0.256130 | Val Loss: 0.252928 | LR: 5.24e-05
+
+                                                                               
+[Epoch 72] Train Loss: 0.255398 | Val Loss: 0.255175 | LR: 5.24e-05
+
+                                                                               
+[Epoch 73] Train Loss: 0.256598 | Val Loss: 0.252546 | LR: 4.19e-05
+
+                                                                               
+[Epoch 74] Train Loss: 0.254929 | Val Loss: 0.253996 | LR: 4.19e-05
+
+                                                                               
+[Epoch 75] Train Loss: 0.255384 | Val Loss: 0.253502 | LR: 4.19e-05
+Early stopping triggered after 10 epochs.
+Training Finished.
+
+--------------------------------------------------
+[2025-12-12 05:05:35.840458] 执行结束，返回码: 0
+

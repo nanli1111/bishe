@@ -68,7 +68,7 @@ def visualize_comparison_overlay(model, is2b, tx_clean, rx_faded, h_np, snr_list
     """
     os.makedirs(save_dir, exist_ok=True)
     model.eval()
-    
+
     # === 随机挑选一个样本 ===
     num_samples = tx_clean.shape[0]
     idx_to_plot = np.random.randint(0, num_samples)
@@ -204,30 +204,30 @@ def visualize_constellation_comparison(model, is2b, tx_clean, rx_faded, h_np, sn
         
         os_np = x_onestep.cpu().numpy()
         os_I = os_np[:, 0, mid]; os_Q = os_np[:, 1, mid]
-        
+      
         rf_np = x_rf.cpu().numpy()
         rf_I = rf_np[:, 0, mid]; rf_Q = rf_np[:, 1, mid]
 
         # 5. 绘图 (1行4列)
         fig, axs = plt.subplots(1, 4, figsize=(24, 6))
-        
+
         # Config
         alpha_val = 0.4
         s_val = 5
         lim = 2.5
-        
+
         # Subplot 1: Noisy Input
         axs[0].scatter(y_I, y_Q, s=s_val, c='red', alpha=alpha_val, label='Received')
         axs[0].set_title(f"Received (Faded+Noisy)\nSNR={snr_db}dB")
         axs[0].set_xlim(-lim, lim); axs[0].set_ylim(-lim, lim)
         axs[0].grid(True, linestyle='--', alpha=0.5)
-        
+
         # Subplot 2: One-Step Output
         axs[1].scatter(os_I, os_Q, s=s_val, c='blue', alpha=alpha_val, label='One-Step')
         axs[1].set_title("One-Step Prediction")
         axs[1].set_xlim(-lim, lim); axs[1].set_ylim(-lim, lim)
         axs[1].grid(True, linestyle='--', alpha=0.5)
-        
+  
         # Subplot 3: Rectified Flow Output (Hybrid)
         axs[2].scatter(rf_I, rf_Q, s=s_val, c='green', alpha=alpha_val, label='Rectified Flow (Hybrid)')
         axs[2].set_title("RF Output (Hybrid Anchor)")
@@ -252,11 +252,11 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_steps = 20
     sps = 16 
-    
+
     # === 路径配置 ===
-    ckpt_path = fr'IS2B/rIS2B_nakagmi_resnet_adjust/results/best_model_IS2B_resnet_pro_scope_{n_steps}.pth'
-    vis_wav_dir = 'IS2B/rIS2B_nakagmi_resnet_adjust/vis_waveforms'
-    vis_con_dir = 'IS2B/rIS2B_nakagmi_resnet_adjust/vis_constellations'
+    ckpt_path = fr'rIS2B_nakagmi_resnet_adjust/results/best_model_IS2B_resnet_pro_scope_{n_steps}.pth'
+    vis_wav_dir = 'rIS2B_nakagmi_resnet_adjust/vis_waveforms'
+    vis_con_dir = 'rIS2B_nakagmi_resnet_adjust/vis_constellations'
 
     # === 1. 构建 TimeResNet1D 模型 ===
     print(f"Building TimeResNet1D on {device}...")
@@ -281,13 +281,13 @@ if __name__ == "__main__":
     print("正在加载数据...")
     # 我们多取一点数据，比如取 2048 个用于画星座图
     test_data = QPSKDataset(400000, 402048) 
-    
+
     tx_clean = test_data.x   
     rx_faded = test_data.y   
     h_np = test_data.z       
 
     snr_list = [0, 5, 10, 15, 20] 
-    
+
     # === 3. 运行波形可视化 (单样本) ===
     visualize_comparison_overlay(
         model=model,
@@ -300,7 +300,7 @@ if __name__ == "__main__":
         device=device,
         save_dir=vis_wav_dir
     )
-    
+
     # === 4. 运行星座图可视化 (批量样本) ===
     visualize_constellation_comparison(
         model=model,
@@ -314,5 +314,5 @@ if __name__ == "__main__":
         save_dir=vis_con_dir,
         num_points=2048 
     )
-    
+
     print("所有可视化任务已完成。")

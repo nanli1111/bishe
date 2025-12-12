@@ -9,7 +9,7 @@ import csv
 
 # === 引入项目模块 ===
 # 1. 导入新的 ResNet 模型
-from model.resnet import TimeResNet1D
+from model.resnet_pro import DilatedTimeResNet1D
 # 2. 数据集与工具
 from dataset.dataset import QPSKDataset
 from test_fig_x_pre import add_awgn_noise_torch
@@ -148,24 +148,24 @@ if __name__ == "__main__":
     
     # === 路径配置 ===
     # 指向 TimeResNet 训练出的最佳模型
-    ckpt_path = fr'IS2B/rIS2B_nakagmi_resnet_combine/results/best_model_IS2B_resnet_{n_steps}.pth'
+    ckpt_path = fr'Estimate/rIS2B_nakagmi_resnet_combine/results/best_model_IS2B_resnet_{n_steps}.pth'
     
     # 结果保存
-    result_img_path = f'IS2B/rIS2B_nakagmi_resnet_combine/ber_results/ber_curve_onestep_resnet.png'
-    result_csv_path = f'IS2B/rIS2B_nakagmi_resnet_combine/ber_results/ber_data_onestep_resnet.csv'
+    result_img_path = f'Estimate/rIS2B_nakagmi_resnet_combine/ber_results/ber_curve_onestep_resnet.png'
+    result_csv_path = f'Estimate/rIS2B_nakagmi_resnet_combine/ber_results/ber_data_onestep_resnet.csv'
     
     # 基准 BER 文件 (可选)
-    baseline_csv_path = 'IS2B/rIS2B_nakagmi_resnet_combine/ber_results/baseline_ber.csv'
+    baseline_csv_path = 'Estimate/rIS2B_nakagmi_resnet_combine/ber_results/baseline_ber.csv'
 
     # ----- 1. 加载 TimeResNet1D 模型 -----
     print(f"Building TimeResNet1D on {device}...")
     # 参数必须与 train_resnet.py 中定义的完全一致
-    model = TimeResNet1D(
+    model = DilatedTimeResNet1D(
         in_channels=4, 
         out_channels=2, 
-        hidden_dim=128,  
-        num_blocks=8,    
-        time_emb_dim=64  
+        hidden_dim=128,   # 宽度
+        num_blocks=12,    # 深度可以加深，例如 12 层
+        time_emb_dim=128
     ).to(device)
 
     if os.path.exists(ckpt_path):

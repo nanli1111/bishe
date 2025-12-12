@@ -102,7 +102,7 @@ class IS2B(nn.Module):
             # 4. 构造翻转系数: 一致乘以 1.0，反了乘以 -1.0
             # [B, 2] -> [B, 2, 1]
             correction_factor = (1.0 - 2.0 * flip_mask).unsqueeze(-1)
-            
+
             # 5. 执行整体翻转
             # 这会把那些"形状完美但跑错象限"的波形直接折叠回正确的象限
             x = x * correction_factor

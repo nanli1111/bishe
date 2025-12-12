@@ -13,7 +13,7 @@ from model.resnet_pro import DilatedTimeResNet1D
 # 2. 导入 IS2B 包装器
 from IS2B_x_pre import IS2B
 # 3. 数据集与工具
-from dataset.dataset import QPSKDataset
+from dataset.dataset_5 import QPSKDataset
 from test_fig_x_pre import add_awgn_noise_torch
 
 # 中文字体设置
@@ -105,7 +105,7 @@ def IS2B_restore_symbol_hybrid(snr_db_sample, is2b_instance, rx_clean, h_np, bat
             anchor_x = model(net_input_os, t_max)
             
             # === Step B: 执行 Rectified Flow 采样 (带 Anchor 约束) ===
-            x_rec = is2b_instance.sample(
+            x_rec = is2b_instance.sample_rectified_flow(
                 y=y_batch,
                 h=h_batch,
                 guidance_scale=guidance_scale,
@@ -177,29 +177,30 @@ if __name__ == "__main__":
     n_steps = 20   # 必须与训练时的设置一致
     batch_size = 4096 
     sps = 16 
-    
+
     # 即使之前没训 CFG，这里的 guidance_scale 设大一点 (e.g. 1.5) 也没事了
     # 因为有了 anchor 约束，不怕跑偏
     guidance_scale = 1.0 
 
     # === 路径配置 ===
-    ckpt_path = fr'IS2B/rIS2B_nakagmi_resnet_adjust/results/best_model_IS2B_resnet_pro_scope_{n_steps}.pth'
-    
+    ckpt_path = fr'F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\results\best_model_IS2B_resnet_pro_scope_{n_steps}_se.pth'
+
     # 保存路径 (文件名改一下以区分)
-    result_save_path = f'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_scope.png'
-    result_csv_path = f'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_data_resnet_scope.csv'
-    
-    baseline_csv_path = 'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_values.csv'
+    result_save_path = f'rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_scope_se.png'
+    result_csv_path = f'rIS2B_nakagmi_resnet_adjust/ber_results/ber_data_resnet_scope_se.csv'
+
+    baseline_csv_path = 'rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_values_se.csv'
 
     # ----- 1. 加载 TimeResNet1D 模型 -----
     print(f"Building TimeResNet1D on {device}...")
-    model = DilatedTimeResNet1D(
+    model = SETimeResNet1D(
         in_channels=4, 
         out_channels=2, 
-        hidden_dim=128,   # 宽度
-        num_blocks=12,    # 深度可以加深，例如 12 层
+        hidden_dim=128,   # 保持这个宽度即可
+        num_blocks=12,    # SE 模块不会增加显存负担，可以维持较深的层数
         time_emb_dim=128
     ).to(device)
+    
 
     if os.path.exists(ckpt_path):
         print(f"加载模型权重: {ckpt_path}")
@@ -220,7 +221,7 @@ if __name__ == "__main__":
     n_win = rx_clean.shape[0]
 
     # ----- 3. 加载标签 -----
-    label_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
+    label_path = r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data_5\labels.npy'
     print(f"Loading Labels from {label_path}...")
     label_all = np.load(label_path)
     label_seg = label_all[test_start:test_end]
@@ -228,7 +229,7 @@ if __name__ == "__main__":
     labels_iq = np.array([map_label[int(v)] for v in label_seg], dtype=int)
 
     # ----- 4. 运行仿真 -----
-    snr_range = np.arange(0, 19, 1) # 2 ~ 18 dB
+    snr_range = np.arange(0, 19, 1) # -2 ~ 18 dB
     model_bers = []
 
     print(f"开始测试 (Hybrid: OneStep Anchor + Rectified Flow)...")

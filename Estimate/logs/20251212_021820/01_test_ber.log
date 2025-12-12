@@ -1,0 +1,98 @@
+[2025-12-12 02:18:20.525536] 开始执行: D:\anaconda\envs\ljn\python.exe F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\test_ber.py
+--------------------------------------------------
+Building TimeResNet1D on cuda...
+加载模型权重: F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\results\best_model_IS2B_resnet_pro_scope_20_5.pth
+正在加载数据...
+Loading Labels from F:\LJN\bishe\bishe\Estimate\data\nakagmi_data\labels.npy...
+开始测试 (Hybrid: OneStep Anchor + Rectified Flow)...
+
+=== SNR (Symbol): -2 dB ===
+
+BER: 1.941350e-01
+
+=== SNR (Symbol): -1 dB ===
+
+BER: 1.676250e-01
+
+=== SNR (Symbol): 0 dB ===
+
+BER: 1.437350e-01
+
+=== SNR (Symbol): 1 dB ===
+
+BER: 1.204500e-01
+
+=== SNR (Symbol): 2 dB ===
+
+BER: 9.979500e-02
+
+=== SNR (Symbol): 3 dB ===
+
+BER: 7.955000e-02
+
+=== SNR (Symbol): 4 dB ===
+
+BER: 6.264500e-02
+
+=== SNR (Symbol): 5 dB ===
+
+BER: 4.980000e-02
+
+=== SNR (Symbol): 6 dB ===
+
+BER: 3.773000e-02
+
+=== SNR (Symbol): 7 dB ===
+
+BER: 2.902000e-02
+
+=== SNR (Symbol): 8 dB ===
+
+BER: 2.203000e-02
+
+=== SNR (Symbol): 9 dB ===
+
+BER: 1.698500e-02
+
+=== SNR (Symbol): 10 dB ===
+
+BER: 1.334000e-02
+
+=== SNR (Symbol): 11 dB ===
+
+BER: 1.095500e-02
+
+=== SNR (Symbol): 12 dB ===
+
+BER: 9.315000e-03
+
+=== SNR (Symbol): 13 dB ===
+
+BER: 7.780000e-03
+
+=== SNR (Symbol): 14 dB ===
+
+BER: 7.185000e-03
+
+=== SNR (Symbol): 15 dB ===
+
+BER: 6.425000e-03
+
+=== SNR (Symbol): 16 dB ===
+
+BER: 6.015000e-03
+
+=== SNR (Symbol): 17 dB ===
+
+BER: 5.905000e-03
+
+=== SNR (Symbol): 18 dB ===
+
+BER: 5.375000e-03
+✅ 结果已成功保存至 CSV: rIS2B_nakagmi_resnet_adjust/ber_results/ber_data_resnet_scope_5.csv
+未找到基准 CSV 文件: rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_values_5.csv
+Done. Saved Image to rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_scope_5.png
+
+--------------------------------------------------
+[2025-12-12 02:30:26.362612] 执行结束，返回码: 0
+

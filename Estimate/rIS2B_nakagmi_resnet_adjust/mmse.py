@@ -4,7 +4,7 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from dataset.dataset import QPSKDataset
+from dataset.dataset_5 import QPSKDataset
 from test_fig_x_pre import add_awgn_noise_np
 
 # 全局绘图配置
@@ -22,7 +22,7 @@ def generate_rrc_filter(sps, num_taps, alpha):
             h[i] = (alpha / np.sqrt(2)) * ((1 + 2/np.pi)*np.sin(np.pi/(4*alpha)) + (1 - 2/np.pi)*np.cos(np.pi/(4*alpha)))
         else:
             h[i] = (np.sin(np.pi*ti*(1-alpha)) + 4*alpha*ti*np.cos(np.pi*ti*(1+alpha))) / (np.pi*ti*(1-(4*alpha*ti)**2))
-    
+
     # [关键] 保持与数据集生成器一致：单位能量归一化
     return h / np.sqrt(np.sum(h**2))
 
@@ -143,8 +143,8 @@ def run_simulation(y_clean, y_faded, h_est, true_bits, snr_db, rrc_filter,
 if __name__ == "__main__":
     # 配置
     start, end = 400000, 500000
-    label_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
-    save_dir = 'IS2B/rIS2B_nakagmi_resnet_adjust/ber_results'
+    label_path = r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data_5\labels.npy'
+    save_dir = r'rIS2B_nakagmi_resnet_adjust/ber_results'
     # 注意修正路径分隔符
     vis_dir = os.path.join(save_dir, 'vis_baseline')
     
@@ -158,7 +158,7 @@ if __name__ == "__main__":
 
     rrc = generate_rrc_filter(sps=16, num_taps=129, alpha=0.25)
     
-    snr_range = np.arange(0, 19, 1)
+    snr_range = np.arange(-2, 19, 1)
     bers = []
     
     print("Running simulation...")
