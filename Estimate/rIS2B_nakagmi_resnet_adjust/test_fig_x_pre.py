@@ -7,11 +7,11 @@ from matplotlib import rcParams
 
 # === 引入项目模块 ===
 # 1. 导入新的 ResNet 模型
-from model.resnet_pro import DilatedTimeResNet1D
+from model.resnet_se import SETimeResNet1D
 # 2. 导入 IS2B 包装器
 from IS2B_x_pre import IS2B
 # 3. 数据集与工具
-from dataset.dataset import QPSKDataset
+from dataset.dataset_5 import QPSKDataset
 
 # 中文字体设置
 rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei']
@@ -254,17 +254,17 @@ if __name__ == "__main__":
     sps = 16 
 
     # === 路径配置 ===
-    ckpt_path = fr'rIS2B_nakagmi_resnet_adjust/results/best_model_IS2B_resnet_pro_scope_{n_steps}.pth'
-    vis_wav_dir = 'rIS2B_nakagmi_resnet_adjust/vis_waveforms'
-    vis_con_dir = 'rIS2B_nakagmi_resnet_adjust/vis_constellations'
+    ckpt_path = fr'F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\results\best_model_IS2B_resnet_pro_scope_{n_steps}_se.pth'
+    vis_wav_dir = r'F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\vis_waveforms'
+    vis_con_dir = r'F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\vis_constellations'
 
     # === 1. 构建 TimeResNet1D 模型 ===
     print(f"Building TimeResNet1D on {device}...")
-    model = DilatedTimeResNet1D(
+    model = SETimeResNet1D(
         in_channels=4, 
         out_channels=2, 
-        hidden_dim=128,   # 宽度
-        num_blocks=12,    # 深度可以加深，例如 12 层
+        hidden_dim=128,   # 保持这个宽度即可
+        num_blocks=12,    # SE 模块不会增加显存负担，可以维持较深的层数
         time_emb_dim=128
     ).to(device)
 

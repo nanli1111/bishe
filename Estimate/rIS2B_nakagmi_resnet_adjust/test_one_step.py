@@ -8,10 +8,10 @@ from matplotlib import rcParams
 import csv
 
 # === 引入项目模块 ===
-# 1. 导入新的 ResNet 模型
-from model.resnet_pro import DilatedTimeResNet1D
-# 2. 数据集与工具
-from dataset.dataset import QPSKDataset
+# 1. 导入 SE-ResNet 模型 (替换原模型)
+from model.resnet_se import SETimeResNet1D
+# 2. 数据集 (匹配 SE 模型的 dataset_5)
+from dataset.dataset_5 import QPSKDataset
 from test_fig_x_pre import add_awgn_noise_torch
 
 # 中文字体设置
@@ -56,10 +56,10 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
     plt.figure(figsize=(10, 6))
     snr_array = np.array(snr_range)
     
-    # 绘制当前模型曲线
-    plt.semilogy(snr_array, model_bers, 'o-', color='red', label='TimeResNet1D (One-Step Pred)')
+    # 绘制当前 SE 模型的一步预测曲线
+    plt.semilogy(snr_array, model_bers, 'o-', color='orange', linewidth=2, label='SE-ResNet (One-Step)')
     
-    # 绘制基准
+    # 绘制基准 (Baseline)
     if len(ref_bers) > 0:
         limit = min(len(snr_array), len(ref_bers))
         plt.semilogy(snr_array[:limit], ref_bers[:limit], 's--', color='blue', alpha=0.6, label='Baseline (MMSE)')
@@ -67,7 +67,7 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
     plt.grid(True, which='both', linestyle='--', alpha=0.7)
     plt.xlabel('SNR per symbol (dB)')
     plt.ylabel('BER')
-    plt.title('IS2B One-Step Prediction Performance (ResNet)')
+    plt.title('One-Step Prediction Performance (SE-ResNet)')
     plt.legend()
     
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -76,13 +76,13 @@ def plot_ber(model_bers, ref_bers, snr_range, save_path):
     plt.close()
 
 # ==========================================
-# 2. 核心：ResNet 一步预测函数
+# 2. 核心：保留一步生成逻辑 (适用于 SE 模型)
 # ==========================================
 
 def predict_one_step_resnet(model, rx_clean, h_np, snr_db_sample, n_steps, device='cuda', batch_size=4096):
     """
-    使用 TimeResNet1D 进行一步预测。
-    输入：y (含噪信号) + t=1 (对应 index = n_steps-1)
+    使用 SETimeResNet1D 进行一步预测 (One-Step Generation)。
+    输入：y (含噪信号) + t=T (对应 index = n_steps-1)
     输出：预测的 x0
     """
     model.eval()
@@ -114,15 +114,13 @@ def predict_one_step_resnet(model, rx_clean, h_np, snr_db_sample, n_steps, devic
             current_batch_size = y_batch.shape[0]
 
             # === 关键步骤 ===
-            # 1. 构造时间索引：设为最大值 (n_steps - 1)
-            # 代表输入完全是噪声/衰落状态 (t=1.0)
+            # 1. 构造时间索引：设为最大值 (n_steps - 1)，即 t=1.0 (纯噪声/观测状态)
             t_idx = torch.full((current_batch_size,), n_steps - 1, device=device, dtype=torch.long)
 
             # 2. 构造网络输入 [y, h]
             net_input = torch.cat([y_batch, h_batch], dim=1)
 
-            # 3. 直接预测 x0
-            # TimeResNet1D 接受 (x, t) 作为输入
+            # 3. 直接预测 x0 (SE 模型同样接受 x, t 输入)
             pred_x0 = model(net_input, t_idx)
             
             # 4. 提取数据转 Numpy
@@ -146,25 +144,24 @@ if __name__ == "__main__":
     batch_size = 4096
     sps = 16 
     
-    # === 路径配置 ===
-    # 指向 TimeResNet 训练出的最佳模型
-    ckpt_path = fr'Estimate/rIS2B_nakagmi_resnet_combine/results/best_model_IS2B_resnet_{n_steps}.pth'
+    # === 路径配置 (已修改为 SE 模型相关) ===
+    # 权重文件
+    ckpt_path = fr'F:\LJN\bishe\bishe\Estimate\rIS2B_nakagmi_resnet_adjust\results\best_model_IS2B_resnet_pro_scope_{n_steps}_se.pth'
     
-    # 结果保存
-    result_img_path = f'Estimate/rIS2B_nakagmi_resnet_combine/ber_results/ber_curve_onestep_resnet.png'
-    result_csv_path = f'Estimate/rIS2B_nakagmi_resnet_combine/ber_results/ber_data_onestep_resnet.csv'
+    # 结果保存 (标记为 onestep_se)
+    result_img_path = f'Estimate\rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_onestep_resnet_se.png'
+    result_csv_path = f'Estimate\rIS2B_nakagmi_resnet_adjust/ber_results/ber_data_onestep_resnet_se.csv'
     
-    # 基准 BER 文件 (可选)
-    baseline_csv_path = 'Estimate/rIS2B_nakagmi_resnet_combine/ber_results/baseline_ber.csv'
+    # 基准 BER 文件 (可选，用于画图对比)
+    baseline_csv_path = 'Estimate\rIS2B_nakagmi_resnet_adjust/ber_results/ber_curve_resnet_values_se.csv'
 
-    # ----- 1. 加载 TimeResNet1D 模型 -----
-    print(f"Building TimeResNet1D on {device}...")
-    # 参数必须与 train_resnet.py 中定义的完全一致
-    model = DilatedTimeResNet1D(
+    # ----- 1. 加载 SETimeResNet1D 模型 (Change: Model) -----
+    print(f"Building SETimeResNet1D on {device}...")
+    model = SETimeResNet1D(
         in_channels=4, 
         out_channels=2, 
-        hidden_dim=128,   # 宽度
-        num_blocks=12,    # 深度可以加深，例如 12 层
+        hidden_dim=128,   
+        num_blocks=12,    
         time_emb_dim=128
     ).to(device)
 
@@ -174,7 +171,7 @@ if __name__ == "__main__":
     else:
         raise FileNotFoundError(f"权重文件未找到: {ckpt_path}")
 
-    # ----- 2. 加载数据 -----
+    # ----- 2. 加载数据 (Change: dataset_5) -----
     print("Loading Test Data...")
     test_start, test_end = 400000, 500000
     test_data = QPSKDataset(test_start, test_end) 
@@ -182,23 +179,23 @@ if __name__ == "__main__":
     h_np = test_data.z       # [N,2,L]
     
     # 加载标签
-    label_path = r'F:\LJN\bishe\bishe\data\nakagmi_data\labels.npy'
+    label_path = r'F:\LJN\bishe\bishe\Estimate\data\nakagmi_data_5\labels.npy'
     label_all = np.load(label_path)
     label_seg = label_all[test_start:test_end]
     map_label = {0: (0, 0), 1: (0, 1), 2: (1, 1), 3: (1, 0)}
     labels_iq = np.array([map_label[int(v)] for v in label_seg], dtype=int)
 
     # ----- 3. 运行测试 -----
-    snr_range = np.arange(0, 19, 1) # 2dB 到 18dB
+    snr_range = np.arange(0, 19, 1) # 0dB 到 18dB
     model_bers = []
 
-    print(f"开始一步预测 BER 测试 (ResNet)...")
+    print(f"开始一步预测 BER 测试 (SE-ResNet)...")
     
     for snr_db in snr_range:
         # 换算 SNR
         snr_db_sample = snr_db - 10 * math.log10(sps) + 10 * math.log10(2)
 
-        # 运行一步预测
+        # 运行一步预测 (保持原逻辑)
         symbols_pred = predict_one_step_resnet(
             model=model,
             rx_clean=rx_clean,
@@ -225,10 +222,19 @@ if __name__ == "__main__":
         try:
             with open(baseline_csv_path, 'r', newline='') as f:
                 reader = csv.DictReader(f)
-                baseline_data = {float(row['snr_db']): float(row['baseline_ber']) for row in reader}
+                # 读取 baseline_ber 列作为对比
+                baseline_data = {}
+                for row in reader:
+                    try:
+                        s = round(float(row['snr_db']), 1)
+                        if 'baseline_ber' in row:
+                            baseline_data[s] = float(row['baseline_ber'])
+                    except: continue
+                
                 for snr in snr_range:
-                    ref_bers.append(baseline_data.get(snr, 1.0))
-        except:
-            pass
+                    s = round(float(snr), 1)
+                    ref_bers.append(baseline_data.get(s, 1.0))
+        except Exception as e:
+            print(f"读取基准出错: {e}")
 
     plot_ber(model_bers, ref_bers, snr_range, result_img_path)

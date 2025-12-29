@@ -199,7 +199,7 @@ if __name__ == "__main__":
 
     # 3. 数据加载
     train_loader, val_loader = get_train_QPSKdataloader(
-        start=0, end=400000, batch_size=batch_size, val_split=0.1
+        start=0, end=1800000, batch_size=batch_size, val_split=0.1
     )
 
     # 4. 开始训练

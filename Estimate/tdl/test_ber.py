@@ -13,8 +13,8 @@ from model.resnet_se import SETimeResNet1D
 # 2. 导入 IS2B 包装器
 from IS2B_x_pre import IS2B
 # 3. 数据集与工具
-from dataset.dataset_5 import QPSKDataset
-from test_fig_x_pre import add_awgn_noise_torch
+from dataset.dataset import QPSKDataset
+from Estimate.tdl.test_vis_joint import add_awgn_noise_torch
 
 # 中文字体设置
 rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei']
